@@ -1,0 +1,64 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build and release artifacts (attach these to GitHub Releases; do not commit)
+build/
+build-*/
+dist/
+dist-*/
+release/
+*.spec.bak
+
+# Local device data and diagnostics
+config/
+captures/
+logs/
+selected_device.json
+devices.json
+*_scan_*.json
+*_manual.json
+*_status.json
+*_auto.json
+
+# Private research/validation archive; not part of the public source release
+docs/phase*.md
+docs/research.md
+docs/vivid2.md
+scan_chihiros.py
+vivid2_control.py
+vivid2_live_probe.py
+vivid2_rgb_test.py
+tests/test_vivid2_live_probe.py
+tests/test_vivid2_rgb_test.py
+
+# APKs, decompilation output, and proprietary app-analysis material
+*.apk
+*.apks
+*.xapk
+*.aab
+*.dex
+apktool-output/
+jadx-output/
+decompiled/
+app-analysis/
+proprietary-research/
+
+# Local secrets and editor/machine files
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+*.key
+credentials*.json
+secrets*.json
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
