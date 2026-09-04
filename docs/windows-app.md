@@ -1,20 +1,27 @@
-# Chihiros Local Controller 1.1.0 — Windows application
+# Chihiros Local Controller 1.2.0 — Windows application
 
 The primary source launcher is `chihiros_local_controller.py`.
 Both PyInstaller variants produce `ChihirosLocalController.exe`.
 The historical launcher is a small compatibility shim, not a second application.
 
-The shared Tkinter shell shows RGB controls only for RGB Vivid II and one
-Brightness control only for A2 Max. Scanning is explicit, selection never
+The shared Tkinter shell shows RGB controls for RGB Vivid II, one Brightness
+control for A2 Max, and Red/Green/Blue/White controls with Apply WRGB for
+Magnetic Light II. Scanning is explicit, selection never
 controls a light, and Apply submits one operation at a time.
 
 Device choices use normalized full BLE addresses as keys. A dropdown row maps
 to a stored address; the shortened visible label is never an identity key.
 The last selection is saved locally; there is no GUI clear/reset control.
 The historical per-user data directory is retained for preference compatibility.
+Magnetic Light II requested WRGB inputs are retained separately per full address
+during the session. All three tested Magnetic II units remain independently
+selectable; Apply connects only to the selected canonical address.
 
 Vivid II uses its established controller and packet builders. A2 Max uses its
-manual-only adapter and two-packet allowlist. Both use the shared strict NUS
+manual-only adapter and two-packet allowlist. Magnetic Light II uses its
+manual-only adapter and ordered five-packet allowlist: manual mode, then
+Red/Green/Blue/White on channels 0/1/2/3 at direct 0..100 levels, with about
+30 ms between writes and immediate disconnection afterward. All use strict NUS
 transport. The unique service's direct RX/TX children must have the required
 properties. FE59 and its entire subtree remain blacklisted. Endpoints are
 rechecked before every write, handles never select endpoints, and pairing is off.

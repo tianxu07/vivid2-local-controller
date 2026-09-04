@@ -1,4 +1,4 @@
-Chihiros Local Controller 1.1.0
+Chihiros Local Controller 1.2.0
 ==============================
 
 Unofficial community tool. Not affiliated with Chihiros Aquatic Studio.
@@ -10,6 +10,14 @@ SUPPORTED MODELS
 
 - Chihiros RGB Vivid II: manual Red / Green / Blue, each 0-100.
 - Chihiros A2 Max: manual Brightness, 1-100.
+- Chihiros Magnetic Light II: Red / Green / Blue / White, each 0-100, Apply WRGB.
+  DYMNC classification and manual WRGB control are physically validated on
+  three Magnetic Light II units. Isolated testing confirmed R=0/G=1/B=2/W=3
+  and zero turning a channel off. Official-app and local R20/G40/B60/W30 settings
+  matched visible color and apparent brightness in practical physical testing.
+  This supports direct 0-100 control, not photometric linearity or calibrated
+  equivalence. Other revisions are not guaranteed; older Magnetic Light is
+  not included.
 
 A2 Max support has been physically validated on one DYNCMC A2 Max unit.
 Compatibility with every hardware/firmware revision is not guaranteed.
@@ -18,9 +26,12 @@ to official-app percentages. Unrelated Nordic UART devices are not supported.
 
 START
 
-Extract the entire recommended ZIP. Open the ChihirosLocalController folder
+Windows 10/11 x64 with Bluetooth LE is required; Python is not required.
+Extract the entire ChihirosLocalController-1.2.0-windows-x64.zip package.
+Open the ChihirosLocalController folder
 and run ChihirosLocalController.exe. Keep the _internal directory beside it.
-The optional one-file executable extracts its runtime and may start slower.
+The optional ChihirosLocalController-1.2.0-windows-x64-onefile.exe extracts its
+runtime and may start slower.
 
 WORKFLOW
 
@@ -29,8 +40,8 @@ WORKFLOW
 3. Launch Chihiros Local Controller.
 4. Click Scan for Lights.
 5. Select the desired supported light.
-6. Adjust its RGB or Brightness controls.
-7. Click Apply RGB or Apply Brightness.
+6. Adjust its RGB, Brightness or WRGB controls.
+7. Click Apply RGB, Apply Brightness or Apply WRGB.
 8. Select another supported light, adjust its controls, and Apply as needed.
 
 No Chihiros account, login, internet or Chihiros cloud service is required.
@@ -42,6 +53,15 @@ The dropdown shows model plus a short unique address suffix. Names/labels
 are never used as device identity keys. Selection and moving sliders send
 nothing. Values are requested inputs, not current brightness readings.
 Only the last selected device is remembered locally.
+Magnetic Light II WRGB inputs are kept per full address during the session,
+separately from Vivid II and A2 Max inputs. Three advertising Magnetic II units
+appear as three choices. Apply WRGB connects only to the selected full address,
+sends manual mode then R/G/B/W in channel order 0/1/2/3 with about 30 ms between
+writes, and disconnects. It sends no clearing prelude, status query or subscription.
+
+Physical GUI validation passed on all three Magnetic Light II units, including
+independent selection, selected-device-only control and per-address slider state.
+A2 Max and RGB Vivid II regression checks and model-control switching passed.
 
 IMPORTANT
 

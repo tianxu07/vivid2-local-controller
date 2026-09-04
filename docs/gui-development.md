@@ -1,4 +1,15 @@
-# v1.1.0 validation and architecture
+# v1.2.0 validation and architecture
+
+The user completed physical GUI validation of the 1.2.0 development build with
+three Magnetic Light II units. All three were discovered separately and correctly
+classified from DYMNC advertisements. Each Apply WRGB reached only the selected
+canonical address, with no observed cross-device writes or routing mix-ups.
+Per-address WRGB inputs were retained during the session. A2 Max and RGB Vivid II
+physical regression tests and switching between all three control panels passed.
+This validates the tested hardware; it does not establish universal revision
+compatibility, photometric calibration or linearity.
+
+## Earlier v1.1.0 physical validation
 
 The user reported successful physical regression testing through the unified GUI:
 A2 Max discovery, selection and Apply Brightness; switching to RGB Vivid II;
@@ -15,17 +26,23 @@ universal hardware/firmware support or exact official-app percentage equivalence
 - `gui/app.py`: one GUI shell; model-specific controls and address-based selection.
 - `gui/controller.py`: discovery filtering, local last-selection persistence,
   canonical identity, collision-safe display suffixes and adapter routing.
-- `chihiros/models.py`: explicit verified Vivid II prefixes and the DYNCMC candidate.
+- `chihiros/models.py`: verified Vivid II prefixes, the DYNCMC A2 Max candidate,
+  and the DYMNC Magnetic Light II prefix observed on three physical units.
 - `chihiros/vivid2.py`: existing Vivid II behavior, unchanged.
 - `chihiros/a2max_controller.py`: manual mode then channel-0 brightness, no retries.
 - `chihiros/a2max_protocol.py`: shared A2 Max packet generation.
+- `chihiros/magnetic2_controller.py`: manual mode then complete R/G/B/W state,
+  an ordered five-packet allowlist, exact-address checks and no retries.
+- `chihiros/magnetic2_protocol.py`: validated frame builder with direct 0..100 levels.
 - `chihiros/transport.py`: shared scanner, service-scoped NUS and FE59 exclusion.
 
 The full normalized BLE address is the internal identity. Dropdown labels start
 with four address digits, extending colliding suffixes until unique. Row ordering
 and label changes do not change saved identity. Duplicate advertised names and
-same-model devices remain distinct. Sliders are shared requested inputs, not
-per-device state readback. There is no multi-device settings database.
+same-model devices remain distinct. Sliders are requested inputs, not device
+state readback. Magnetic II inputs are kept per address for the current session;
+existing Vivid II and A2 Max input behavior is preserved. Only the selected
+address is persisted; there is no persistent multi-device settings database.
 
 The GUI import graph excludes the private exact-unit probe CLI. Its optional
 local configuration, diagnostics and research material are never packaged.

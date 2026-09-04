@@ -32,7 +32,8 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["pytest", "unittest", "tests", "chihiros.a2max", "chihirosctl", "vivid2_gui"],
+    excludes=["pytest", "unittest", "tests", "chihiros.a2max", "chihiros.magnetic2_diagnostic",
+              "chihirosctl", "vivid2_gui"],
     noarchive=False,
     optimize=0,
 )

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from tkinter import messagebox, ttk
 from typing import Any, Coroutine
 
-from chihiros.constants import WINDOWS_APP_VERSION
+from chihiros.constants import MAGNETIC_II_MODEL, WINDOWS_APP_VERSION
 from gui.controller import (
     ApplicationController,
     CompatibleDevice,
@@ -21,13 +21,14 @@ from gui.controller import (
     friendly_error,
     parse_brightness_input,
     parse_rgb_inputs,
+    parse_wrgb_inputs,
     preferred_device,
 )
 
 DEFAULT_WINDOW_WIDTH = 620
-DEFAULT_WINDOW_HEIGHT = 600
+DEFAULT_WINDOW_HEIGHT = 680
 MINIMUM_WINDOW_WIDTH = 560
-MINIMUM_WINDOW_HEIGHT = 600
+MINIMUM_WINDOW_HEIGHT = 680
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,10 @@ class ChihirosApplication:
         self.green_var = tk.IntVar(value=50)
         self.blue_var = tk.IntVar(value=50)
         self.brightness_var = tk.IntVar(value=20)
+        # Independent from Vivid II's RGB variables and from other lamps' requests.
+        self.wrgb_vars = tuple(tk.IntVar(value=20) for _ in range(4))
+        self._wrgb_address: str | None = None
+        self._wrgb_values_by_address: dict[str, tuple[int, ...]] = {}
 
         self._build_window()
         self._load_saved_device()
@@ -169,7 +174,7 @@ class ChihirosApplication:
         ttk.Label(outer, text=DISPLAY_NAME, style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             outer,
-            text="Local manual control for RGB Vivid II and A2 Max",
+            text="Local manual control for RGB Vivid II, A2 Max and Magnetic Light II",
             style="Subtitle.TLabel",
         ).pack(anchor="w", pady=(2, 16))
 
@@ -238,6 +243,23 @@ class ChihirosApplication:
             foreground="#666666", wraplength=490,
         ).pack(anchor="w", pady=(6, 0))
 
+        self.wrgb_frame = ttk.LabelFrame(controls_frame, text="Manual WRGB brightness", padding=12)
+        self.wrgb_scales: list[tk.Scale] = []
+        for row, (label, variable, color) in enumerate(zip(
+            ("Red", "Green", "Blue", "White"), self.wrgb_vars,
+            ("#b42318", "#16803a", "#175cd3", "#555555"),
+        )):
+            tk.Label(self.wrgb_frame, text=label, width=7, anchor="w", fg=color,
+                     font=("Segoe UI", 10, "bold")).grid(row=row, column=0, sticky="w", pady=3)
+            scale = tk.Scale(self.wrgb_frame, from_=0, to=100, orient="horizontal",
+                             resolution=1, showvalue=True, variable=variable,
+                             length=410, highlightthickness=0)
+            scale.grid(row=row, column=1, sticky="ew", padx=(8, 0))
+            self.wrgb_scales.append(scale)
+        self.wrgb_frame.columnconfigure(1, weight=1)
+        ttk.Label(self.wrgb_frame, text="Requested levels. Apply switches the selected light to manual mode.",
+                  foreground="#666666", wraplength=490).grid(row=4, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
         action_row = ttk.Frame(outer)
         action_row.pack(fill="x", pady=(16, 0))
         self.apply_button = ttk.Button(
@@ -248,6 +270,9 @@ class ChihirosApplication:
         )
         self.apply_brightness_button = ttk.Button(
             action_row, text="Apply Brightness", style="Action.TButton", command=self.apply_brightness,
+        )
+        self.apply_wrgb_button = ttk.Button(
+            action_row, text="Apply WRGB", style="Action.TButton", command=self.apply_wrgb,
         )
 
         self.smart_plug_label = ttk.Label(
@@ -293,17 +318,29 @@ class ChihirosApplication:
 
     def _refresh_controls(self) -> None:
         """Selection changes only visibility; they never submit a BLE operation."""
+        if self._wrgb_address is not None:
+            self._wrgb_values_by_address[self._wrgb_address] = tuple(v.get() for v in self.wrgb_vars)
+        device = self._selected_device()
+        self._wrgb_address = device.identity if device and device.model == MAGNETIC_II_MODEL else None
+        if self._wrgb_address is not None:
+            for variable, value in zip(self.wrgb_vars, self._wrgb_values_by_address.get(self._wrgb_address, (20, 20, 20, 20))):
+                variable.set(value)
         self.rgb_frame.pack_forget()
         self.brightness_frame.pack_forget()
+        self.wrgb_frame.pack_forget()
         self.apply_button.pack_forget()
         self.apply_brightness_button.pack_forget()
-        controls = controls_for_device(self._selected_device())
+        self.apply_wrgb_button.pack_forget()
+        controls = controls_for_device(device)
         if controls == ("Red", "Green", "Blue"):
             self.rgb_frame.pack(fill="x")
             self.apply_button.pack(fill="x", expand=True, padx=(90, 90))
         elif controls == ("Brightness",):
             self.brightness_frame.pack(fill="x")
             self.apply_brightness_button.pack(fill="x", expand=True, padx=(90, 90))
+        elif controls == ("Red", "Green", "Blue", "White"):
+            self.wrgb_frame.pack(fill="x")
+            self.apply_wrgb_button.pack(fill="x", expand=True, padx=(90, 90))
 
     def _set_devices(self, devices: tuple[CompatibleDevice, ...]) -> None:
         choices = build_device_choices(devices)
@@ -336,8 +373,9 @@ class ChihirosApplication:
         self.scan_button.configure(state=button_state)
         self.apply_button.configure(state=button_state)
         self.apply_brightness_button.configure(state=button_state)
+        self.apply_wrgb_button.configure(state=button_state)
         self.device_combo.configure(state=combo_state)
-        for scale in (*self.scales, self.brightness_scale):
+        for scale in (*self.scales, self.brightness_scale, *self.wrgb_scales):
             scale.configure(state=button_state)
 
     def _submit(self, operation: str, coroutine: Coroutine[Any, Any, Any]) -> None:
@@ -387,6 +425,18 @@ class ChihirosApplication:
         self.status_var.set("Connecting and applying brightness…")
         self._submit("apply_brightness", self.controller.apply_brightness(device, level))
 
+    def apply_wrgb(self) -> None:
+        device = self._require_device()
+        if device is None:
+            return
+        try:
+            levels = parse_wrgb_inputs(*(variable.get() for variable in self.wrgb_vars))
+        except BaseException as exc:
+            self._show_error(exc, "apply_wrgb")
+            return
+        self.status_var.set("Connecting and applying WRGB…")
+        self._submit("apply_wrgb", self.controller.apply_wrgb(device, *levels))
+
     def _device_selected(self, _event: object = None) -> None:
         index = self.device_combo.current()
         self._selected_address = self.device_addresses[index] if 0 <= index < len(self.device_addresses) else None
@@ -422,6 +472,8 @@ class ChihirosApplication:
                 )
             elif operation == "apply_brightness":
                 self.status_var.set(f"Brightness {self.brightness_var.get()} sent. Verify the visible result.")
+            elif operation == "apply_wrgb":
+                self.status_var.set("WRGB applied to the selected Magnetic Light II. Verify the visible result.")
         self.root.after(self.POLL_INTERVAL_MS, self._poll_worker)
 
     def _scan_completed(self, devices: tuple[CompatibleDevice, ...]) -> None:

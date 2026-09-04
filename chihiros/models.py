@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from .constants import (
     A2_MAX_CANDIDATE_PREFIX, A2_MAX_CANDIDATE_SAMPLE_COUNT,
+    MAGNETIC_II_MODEL, MAGNETIC_II_PREFIXES,
     RGB_VIVID_II_MODEL, RGB_VIVID_II_PREFIXES, detect_model,
 )
 
@@ -27,6 +28,7 @@ SUPPORTED_MODELS = (
     # DYNCMC is a candidate from one physically confirmed unit, not universal coverage.
     ModelMetadata(A2_MAX_MODEL, (A2_MAX_CANDIDATE_PREFIX,), ("Brightness",), 1, 100,
                   candidate=True, physical_samples=A2_MAX_CANDIDATE_SAMPLE_COUNT),
+    ModelMetadata(MAGNETIC_II_MODEL, MAGNETIC_II_PREFIXES, ("Red", "Green", "Blue", "White"), 0, 100),
 )
 
 

@@ -17,8 +17,8 @@ REQUIRED_FILES = frozenset({f"{PRODUCT}.exe", "README.txt", "LICENSE", "THIRD_PA
 BLOCKED_PARTS = frozenset({"logs", "captures", ".venv", "venv", "config", ".git", "tests",
                            "__pycache__", "jadx", "jadx-output", "decompiled", "app-analysis",
                            "proprietary-research", "apktool-output"})
-BLOCKED_SUFFIXES = frozenset({".apk", ".xapk", ".apks", ".aab", ".dex", ".pem", ".pfx", ".key"})
-BLOCKED_MODULES = frozenset({"chihiros.a2max", "chihirosctl", "vivid2_gui",
+BLOCKED_SUFFIXES = frozenset({".apk", ".xapk", ".apks", ".aab", ".dex", ".smali", ".pem", ".pfx", ".key"})
+BLOCKED_MODULES = frozenset({"chihiros.a2max", "chihiros.magnetic2_diagnostic", "chihirosctl", "vivid2_gui",
                             "vivid2_live_probe", "vivid2_rgb_test", "scan_chihiros", "vivid2_control"})
 SECRET_PATTERNS = (
     re.compile(rb"AKIA[0-9A-Z]{16}"),
@@ -51,7 +51,7 @@ def check_name(name: str, *, payload: bool = True) -> None:
         raise AuditError(f"Private/developer artifact path: {name}")
     if path.name.lower().startswith((".env", "credentials", "secrets")):
         raise AuditError(f"Secret/environment artifact path: {name}")
-    if payload and (path.name in {"chihirosctl.py", "vivid2_gui.py", "a2max-private-unit.json"}
+    if payload and (path.name in {"chihirosctl.py", "vivid2_gui.py", "magnetic2_diagnostic.py", "a2max-private-unit.json"}
                     or path.suffix.lower() in {".spec", ".ps1"}):
         raise AuditError(f"Developer-only artifact path: {name}")
 

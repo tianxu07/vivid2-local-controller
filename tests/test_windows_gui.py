@@ -299,7 +299,7 @@ class GuiCoreIntegrationTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 controller.close()
             data = json.loads(log_path.read_text(encoding="utf-8"))
-            self.assertEqual(data["application"]["application_version"], "1.1.0")
+            self.assertEqual(data["application"]["application_version"], "1.2.0")
             self.assertIn("controller_version", data["application"])
             self.assertIn("windows_version", data["application"])
             self.assertEqual(data["device"]["name"], "DYNVLOG")

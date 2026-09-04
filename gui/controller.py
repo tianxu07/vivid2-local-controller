@@ -12,10 +12,12 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterable
 
-from chihiros.constants import RGB_VIVID_II_MODEL, WINDOWS_APP_VERSION
+from chihiros.constants import MAGNETIC_II_MODEL, RGB_VIVID_II_MODEL, WINDOWS_APP_VERSION
 from chihiros.models import A2_MAX_MODEL, detect_supported_model, supported_model
 from chihiros.a2max_controller import A2MaxController
 from chihiros.a2max_protocol import validate_a2max_level
+from chihiros.magnetic2_controller import Magnetic2Controller
+from chihiros.magnetic2_protocol import validate_wrgb_levels
 from chihiros.protocol import validate_level
 from chihiros.transport import (
     DeviceConfig,
@@ -42,6 +44,10 @@ class BrightnessValidationError(ValueError):
     """Raised before Bluetooth use when A2 Max brightness is invalid."""
 
 
+class WrgbValidationError(RgbValidationError):
+    """Raised before Bluetooth use when a Magnetic II WRGB value is invalid."""
+
+
 class BusyOperationError(RuntimeError):
     """Raised when a second BLE operation is requested."""
 
@@ -66,7 +72,8 @@ class CompatibleDevice:
 
     def as_core_config(self) -> DeviceConfig:
         return DeviceConfig(
-            alias="selected_vivid2" if self.model == RGB_VIVID_II_MODEL else "selected_a2max",
+            alias={RGB_VIVID_II_MODEL: "selected_vivid2", A2_MAX_MODEL: "selected_a2max",
+                   MAGNETIC_II_MODEL: "selected_magnetic2"}.get(self.model, "selected_device"),
             model=self.model,
             name=self.name,
             address=self.identity,
@@ -150,6 +157,18 @@ def parse_brightness_input(value: object) -> int:
         return validate_a2max_level(value)
     except ValueError as exc:
         raise BrightnessValidationError("Brightness must be a whole number from 1 to 100.") from exc
+
+
+def parse_wrgb_inputs(red: object, green: object, blue: object, white: object) -> tuple[int, int, int, int]:
+    values = []
+    for label, value in zip(("Red", "Green", "Blue", "White"), (red, green, blue, white)):
+        if isinstance(value, str) and re.fullmatch(r"[+-]?\d+", value.strip()):
+            value = int(value.strip(), 10)
+        try:
+            values.append(validate_level(value))
+        except ValueError as exc:
+            raise WrgbValidationError(f"{label} must be a whole number from 0 to 100.") from exc
+    return validate_wrgb_levels(*values)
 
 
 def controls_for_device(device: CompatibleDevice | None) -> tuple[str, ...]:
@@ -271,6 +290,7 @@ class ApplicationController:
         scan_func: Callable[[float], Awaitable[list[ScanResult]]] = scan_supported_devices,
         session_factory: Callable[..., Any] | None = None,
         a2max_session_factory: Callable[..., Any] | None = None,
+        magnetic2_session_factory: Callable[..., Any] | None = None,
     ) -> None:
         self.data_dir = data_dir or default_data_dir()
         self.log_dir = self.data_dir / "logs"
@@ -278,6 +298,7 @@ class ApplicationController:
         self._scan_func = scan_func
         self._session_factory = session_factory
         self._a2max_session_factory = a2max_session_factory
+        self._magnetic2_session_factory = magnetic2_session_factory
         self._busy = False
         self.logger = create_technical_logger(self.log_dir)
         self.logger.info(
@@ -375,6 +396,29 @@ class ApplicationController:
         finally:
             self._finish("apply_brightness")
 
+
+    async def apply_wrgb(self, device: CompatibleDevice, red: object, green: object,
+                         blue: object, white: object) -> Path:
+        levels = parse_wrgb_inputs(red, green, blue, white)
+        self._validate_selected_device(device)
+        if device.model != MAGNETIC_II_MODEL:
+            raise DiscoverySafetyError("WRGB controls require Magnetic Light II")
+        self._begin("apply_wrgb")
+        try:
+            kwargs: dict[str, Any] = {}
+            if self._magnetic2_session_factory is not None:
+                kwargs["session_factory"] = self._magnetic2_session_factory
+            self.logger.info("wrgb_requested address=%s red=%d green=%d blue=%d white=%d",
+                             device.identity, *levels)
+            path = await Magnetic2Controller(device.as_core_config(), self.log_dir, **kwargs).manual(*levels)
+            self.logger.info("wrgb_applied session_log=%s", path)
+            return path
+        except BaseException:
+            self.logger.exception("wrgb_apply_failed address=%s", device.identity)
+            raise
+        finally:
+            self._finish("apply_wrgb")
+
     @staticmethod
     def _validate_selected_device(device: CompatibleDevice) -> None:
         if (
@@ -438,8 +482,10 @@ __all__ = [
     "DISPLAY_NAME",
     "RgbValidationError",
     "BrightnessValidationError",
+    "WrgbValidationError",
     "controls_for_device",
     "parse_brightness_input",
+    "parse_wrgb_inputs",
     "filter_compatible_devices",
     "friendly_error",
     "parse_rgb_inputs",

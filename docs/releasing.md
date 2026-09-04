@@ -1,21 +1,24 @@
-# Local v1.1.0 packaging preparation
+# Local v1.2.0 packaging preparation
 
-The product is **Chihiros Local Controller 1.1.0**. This phase creates local
-artifacts only: remain on `feature/a2max`, with no merge, push, tag, release or
-upload. Existing v1.0.0 artifacts must remain untouched.
+The product is **Chihiros Local Controller 1.2.0** with RGB Vivid II, A2 Max and
+Magnetic Light II manual control. This phase creates local artifacts from
+`feature/magnetic2`, with no commit, tag, push, GitHub release or upload.
+Existing release artifacts remain untouched.
 
 ## Prerequisites and audit
 
 Use Windows x64 Python and the project's environment with
 `requirements-build.txt` installed. Before building, provide an ignored local
-JSON string array of private identifiers and machine paths to reject. The
+JSON string array of all known private identifiers and machine paths to reject,
+including identities from local GUI preferences, logs and research captures. The
 default location is `config/release-private-patterns.json`; never commit it.
 
 The source audit checks the current non-ignored source set, including new files.
 It rejects private identifiers/paths, secret signatures and private artifact
 paths. Generated payload checks inspect every runtime file, compressed ZIP
 entries, executable archive entries and decompressed Python modules. Private
-probe tooling is explicitly excluded from both specifications.
+probe tooling, including `chihiros.magnetic2_diagnostic`, is explicitly excluded
+from both specifications. Keep any expanded audit pattern file private and ignored.
 
 This audit covers the current source tree and artifacts, **not Git history**.
 Earlier development commits may contain private identifiers. Review history
@@ -26,14 +29,14 @@ before any later public push; a clean payload does not sanitize historical commi
 From the repository root:
 
 ```powershell
-.\packaging\build_release.ps1 -Version 1.1.0
+.\packaging\build_release.ps1 -Version 1.2.0
 ```
 
 The builder audits source, runs all hardware-free tests, then creates both
 PyInstaller variants. Each run uses new timestamped version directories and
 refuses to overwrite existing output. It never launches the application.
 
-The outputs under `release/v1.1.0-<run>/` are:
+The outputs under `release/v1.2.0-<run>/` are:
 
 ```text
 onedir/ChihirosLocalController/
@@ -44,8 +47,8 @@ onedir/ChihirosLocalController/
   PYTHON_LICENSE.txt
   PYINSTALLER_COPYING.txt
   _internal/
-ChihirosLocalController-1.1.0-windows-x64.zip
-ChihirosLocalController-1.1.0-windows-x64-onefile.exe
+ChihirosLocalController-1.2.0-windows-x64.zip
+ChihirosLocalController-1.2.0-windows-x64-onefile.exe
 SHA256SUMS.txt
 ```
 
@@ -54,7 +57,7 @@ its documentation and licenses. SHA256SUMS.txt covers the ZIP and optional
 one-file executable. Logs, captures, environments, private configurations,
 research/decompilation artifacts and tests are not package contents.
 The audit report and intermediate build diagnostics stay in the separate
-`build-v1.1.0-<run>` directory, not the public payload.
+`build-v1.2.0-<run>` directory, not the public payload.
 
 For direct developer builds, the generalized specifications are
 `ChihirosLocalController.spec` and `ChihirosLocalController-onefile.spec`.

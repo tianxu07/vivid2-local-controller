@@ -27,12 +27,12 @@ spec.loader.exec_module(audit)
 
 
 class ReleaseMetadataTests(unittest.TestCase):
-    def test_version_and_title_are_public_v110(self) -> None:
-        self.assertEqual(WINDOWS_APP_VERSION, "1.1.0")
+    def test_source_version_and_title_are_v120_final(self) -> None:
+        self.assertEqual(WINDOWS_APP_VERSION, "1.2.0")
         self.assertEqual(DEVELOPMENT_APP_VERSION, WINDOWS_APP_VERSION)
         self.assertEqual(DISPLAY_NAME, "Chihiros Local Controller")
         text = (ROOT / "gui" / "app.py").read_text(encoding="utf-8")
-        self.assertIn("Local manual control for RGB Vivid II and A2 Max", text)
+        self.assertIn("Local manual control for RGB Vivid II, A2 Max and Magnetic Light II", text)
         self.assertNotIn("development support", text)
         self.assertIn("Unofficial community tool. Not affiliated with Chihiros Aquatic Studio.", text)
         self.assertIn("Created by Tianxu Yang", text)
@@ -61,27 +61,35 @@ class ReleaseMetadataTests(unittest.TestCase):
                 for notice in ("README.txt", "LICENSE", "THIRD_PARTY_LICENSES.txt"):
                     self.assertIn(f'project_root / "{notice}"', text)
                 self.assertIn('"chihiros.a2max"', text)  # Explicit private CLI exclusion.
+                self.assertIn('"chihiros.magnetic2_diagnostic"', text)
                 self.assertIn('"chihirosctl"', text)
                 self.assertNotIn('project_root / "vivid2_gui.py"', text)
 
-    def test_windows_version_resource_is_consistent(self) -> None:
+    def test_binary_version_resource_matches_final_application(self) -> None:
         text = (ROOT / "packaging" / "version_info.txt").read_text(encoding="utf-8")
-        self.assertIn("filevers=(1, 1, 0, 0)", text)
-        self.assertIn("prodvers=(1, 1, 0, 0)", text)
+        self.assertIn("filevers=(1, 2, 0, 0)", text)
+        self.assertIn("prodvers=(1, 2, 0, 0)", text)
+        self.assertIn(f"StringStruct(u'FileVersion', u'{WINDOWS_APP_VERSION}')", text)
+        self.assertIn(f"StringStruct(u'ProductVersion', u'{WINDOWS_APP_VERSION}')", text)
         self.assertIn("u'ChihirosLocalController.exe'", text)
         self.assertIn("u'Chihiros Local Controller'", text)
         self.assertNotIn("1.0.0", text)
 
-    def test_public_readmes_document_both_models_and_limits(self) -> None:
+    def test_public_readmes_document_three_models_and_release_limits(self) -> None:
         for filename in ("README.md", "README.txt"):
             text = (ROOT / filename).read_text(encoding="utf-8")
             with self.subTest(filename=filename):
-                for required in ("1.1.0", "RGB Vivid II", "A2 Max", "DYNCMC", "ChihirosLocalController.exe",
+                for required in ("1.2.0", "RGB Vivid II", "A2 Max", "DYNCMC", "ChihirosLocalController.exe",
+                                 "Magnetic Light II", "DYMNC", "Apply WRGB",
+                                 "three Magnetic Light II units", "photometric", "linearity",
+                                 "ChihirosLocalController-1.2.0-windows-x64.zip",
+                                 "ChihirosLocalController-1.2.0-windows-x64-onefile.exe",
                                  "Scan for Lights", "Apply RGB", "Apply Brightness", "smart plug",
                                  "THIRD_PARTY_LICENSES.txt", "Tianxu Yang", "@tianxu_07"):
                     self.assertIn(required, text)
                 self.assertIn("not guaranteed", text.replace("**", ""))
                 self.assertNotIn("1.1.0.dev1", text)
+                self.assertNotIn("1.2.0.dev1", text)
 
     def test_builder_requires_fresh_versioned_paths_and_has_no_publication_step(self) -> None:
         text = (ROOT / "packaging" / "build_release.ps1").read_text(encoding="utf-8")
@@ -92,6 +100,8 @@ class ReleaseMetadataTests(unittest.TestCase):
             self.assertNotIn(forbidden, text)
         self.assertIn("SHA256SUMS.txt", text)
         self.assertIn("--private-patterns", text)
+        self.assertIn(f'[string]$Version = "{WINDOWS_APP_VERSION}"', text)
+        self.assertIn(f'if ($Version -ne "{WINDOWS_APP_VERSION}")', text)
 
 
 class PrivateIdentityConfigTests(unittest.TestCase):
@@ -140,9 +150,9 @@ class ReleaseAuditTests(unittest.TestCase):
 
     def test_private_development_paths_and_secret_files_are_rejected(self) -> None:
         for path in ("logs/session.json", "captures/raw.bin", ".venv/runtime.dll", "config/unit.json",
-                     "research.apk", "app.xapk", "classes.dex", "jadx-output/example.java",
+                     "research.apk", "app.xapk", "classes.dex", "model.smali", "jadx-output/example.java",
                      "decompiled/code.txt", ".env", "credentials.json", "secrets.json", "tests/test.py",
-                     "../outside", "chihirosctl.py"):
+                     "../outside", "chihirosctl.py", "magnetic2_diagnostic.py"):
             with self.subTest(path=path), self.assertRaises(audit.AuditError):
                 audit.check_name(path)
 
@@ -165,10 +175,12 @@ class ReleaseAuditTests(unittest.TestCase):
         with mock.patch("PyInstaller.archive.readers.CArchiveReader", return_value=archive):
             with self.assertRaises(audit.AuditError):
                 audit.audit_executable(Path("test.exe"), ("private-marker",))
-        archive.open_embedded_archive = lambda _: types.SimpleNamespace(toc={"chihiros.a2max": ()})
-        with mock.patch("PyInstaller.archive.readers.CArchiveReader", return_value=archive):
-            with self.assertRaisesRegex(audit.AuditError, "Private/developer Python module"):
-                audit.audit_executable(Path("test.exe"), ())
+        for module_name in ("chihiros.a2max", "chihiros.magnetic2_diagnostic"):
+            with self.subTest(module=module_name):
+                archive.open_embedded_archive = lambda _: types.SimpleNamespace(toc={module_name: ()})
+                with mock.patch("PyInstaller.archive.readers.CArchiveReader", return_value=archive):
+                    with self.assertRaisesRegex(audit.AuditError, "Private/developer Python module"):
+                        audit.audit_executable(Path("test.exe"), ())
 
     def test_zip_must_match_audited_folder_exactly(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
