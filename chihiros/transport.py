@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from .constants import (
     BLACKLISTED_CHARACTERISTIC_UUIDS,
@@ -416,7 +416,7 @@ class LocalSessionLog:
         self._data: dict[str, Any] = {
             "started_at_utc": utc_now(),
             "application": {
-                "name": "Vivid2Controller",
+                "name": "ChihirosLocalController",
                 "application_version": WINDOWS_APP_VERSION,
                 "controller_version": CONTROLLER_VERSION,
                 "windows_version": platform.platform(),
@@ -447,7 +447,9 @@ class LocalSessionLog:
         temporary.replace(self.path)
 
 
-async def scan_known_chihiros(seconds: float) -> list[ScanResult]:
+async def scan_known_chihiros(
+    seconds: float, *, model_detector: Callable[[str | None], str | None] = detect_model,
+) -> list[ScanResult]:
     """Scan without connecting and return devices with source-known prefixes."""
     from bleak import BleakScanner
 
@@ -455,7 +457,7 @@ async def scan_known_chihiros(seconds: float) -> list[ScanResult]:
     results: list[ScanResult] = []
     for device, advertisement in discovered.values():
         name = getattr(advertisement, "local_name", None) or getattr(device, "name", None)
-        model = detect_model(name)
+        model = model_detector(name)
         if model is None:
             continue
         results.append(
@@ -479,11 +481,15 @@ class NusSession:
         *,
         scan_seconds: float = 10.0,
         connect_timeout: float = 15.0,
+        model_detector: Callable[[str | None], str | None] = detect_model,
+        subscribe_notifications: bool = True,
     ) -> None:
         self.device = device
         self.log = session_log
         self.scan_seconds = scan_seconds
         self.connect_timeout = connect_timeout
+        self._model_detector = model_detector
+        self._subscribe_notifications = subscribe_notifications
         self.client: Any | None = None
         self.resolved: ResolvedNus | None = None
         self.notifications: list[ParsedNotification] = []
@@ -525,7 +531,7 @@ class NusSession:
             raise TransportSafetyError(
                 f"Configured address advertised as {found_name!r}, expected {self.device.name!r}"
             )
-        found_model = detect_model(found_name)
+        found_model = self._model_detector(found_name)
         if found_model != self.device.model:
             raise TransportSafetyError(
                 f"Advertisement resolves to {found_model!r}, configured model is {self.device.model!r}"
@@ -571,9 +577,10 @@ class NusSession:
                     "UUID/service topology remains authoritative"
                 )
         verify_resolved_nus(self.resolved, tuple(self.client.services))
-        await self.client.start_notify(self.resolved.tx, self._on_notification)
-        self._subscribed = True
-        self.log.record("notification_subscribed", uuid=NUS_TX_UUID, handle=object_handle(self.resolved.tx))
+        if self._subscribe_notifications:
+            await self.client.start_notify(self.resolved.tx, self._on_notification)
+            self._subscribed = True
+            self.log.record("notification_subscribed", uuid=NUS_TX_UUID, handle=object_handle(self.resolved.tx))
 
     def _on_notification(self, sender: Any, data: bytearray) -> None:
         raw = bytes(data)

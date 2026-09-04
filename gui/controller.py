@@ -7,11 +7,15 @@ import logging
 import os
 import platform
 import re
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterable
 
-from chihiros.constants import RGB_VIVID_II_MODEL, WINDOWS_APP_VERSION, detect_model
+from chihiros.constants import RGB_VIVID_II_MODEL, WINDOWS_APP_VERSION
+from chihiros.models import A2_MAX_MODEL, detect_supported_model, supported_model
+from chihiros.a2max_controller import A2MaxController
+from chihiros.a2max_protocol import validate_a2max_level
 from chihiros.protocol import validate_level
 from chihiros.transport import (
     DeviceConfig,
@@ -25,12 +29,17 @@ from chihiros.vivid2 import Vivid2Controller
 
 
 APP_NAME = "Vivid2Controller"
-DISPLAY_NAME = "RGB Vivid II Local Controller"
+# Retain the existing data directory so saved Vivid II selections still work.
+DISPLAY_NAME = "Chihiros Local Controller"
 DEFAULT_SCAN_SECONDS = 8.0
 
 
 class RgbValidationError(ValueError):
     """Raised before Bluetooth use when a GUI RGB value is invalid."""
+
+
+class BrightnessValidationError(ValueError):
+    """Raised before Bluetooth use when A2 Max brightness is invalid."""
 
 
 class BusyOperationError(RuntimeError):
@@ -43,7 +52,7 @@ class DiscoverySafetyError(RuntimeError):
 
 @dataclass(frozen=True)
 class CompatibleDevice:
-    """A scan result whose advertised name proves RGB Vivid II support."""
+    """A scan result accepted by the development GUI's explicit model registry."""
 
     name: str
     address: str
@@ -51,16 +60,53 @@ class CompatibleDevice:
     rssi: int | None = None
 
     @property
-    def label(self) -> str:
-        return f"{self.model} — {self.name} — {self.address}"
+    def identity(self) -> str:
+        """Canonical Windows BLE address; never a model or presentation label."""
+        return validate_address(self.address)
 
     def as_core_config(self) -> DeviceConfig:
         return DeviceConfig(
-            alias="selected_vivid2",
+            alias="selected_vivid2" if self.model == RGB_VIVID_II_MODEL else "selected_a2max",
             model=self.model,
             name=self.name,
-            address=self.address,
+            address=self.identity,
         )
+
+
+@dataclass(frozen=True)
+class DeviceChoices:
+    devices_by_address: dict[str, CompatibleDevice]
+    addresses: tuple[str, ...]
+    labels: tuple[str, ...]
+
+
+def build_device_choices(devices: Iterable[CompatibleDevice]) -> DeviceChoices:
+    """Separate canonical identities, dropdown row order, and display-only text."""
+    by_address: dict[str, CompatibleDevice] = {}
+    for device in devices:
+        ApplicationController._validate_selected_device(device)
+        identity = device.identity
+        existing = by_address.get(identity)
+        if existing is not None:
+            if (existing.name, existing.model) != (device.name, device.model):
+                raise DiscoverySafetyError("Conflicting device identities for one BLE address")
+            continue
+        by_address[identity] = device if device.address == identity else replace(device, address=identity)
+
+    addresses = tuple(by_address)
+    compact = {address: address.replace(":", "") for address in addresses}
+    widths = {address: 4 for address in addresses}
+    # Extend only colliding suffixes. Full, distinct addresses guarantee termination.
+    while True:
+        suffixes = {address: compact[address][-widths[address]:] for address in addresses}
+        counts = Counter(suffixes.values())
+        collisions = [address for address in addresses if counts[suffixes[address]] > 1]
+        if not collisions:
+            break
+        for address in collisions:
+            widths[address] += 1
+    labels = tuple(f"{by_address[address].model} — …{suffixes[address]}" for address in addresses)
+    return DeviceChoices(by_address, addresses, labels)
 
 
 def default_data_dir() -> Path:
@@ -97,18 +143,39 @@ def parse_rgb_inputs(red: object, green: object, blue: object) -> tuple[int, int
     )
 
 
+def parse_brightness_input(value: object) -> int:
+    if isinstance(value, str) and re.fullmatch(r"[+-]?\d+", value.strip()):
+        value = int(value.strip(), 10)
+    try:
+        return validate_a2max_level(value)
+    except ValueError as exc:
+        raise BrightnessValidationError("Brightness must be a whole number from 1 to 100.") from exc
+
+
+def controls_for_device(device: CompatibleDevice | None) -> tuple[str, ...]:
+    if device is None:
+        return ()
+    ApplicationController._validate_selected_device(device)
+    return supported_model(device.name).controls
+
+
+async def scan_supported_devices(seconds: float) -> list[ScanResult]:
+    return await scan_known_chihiros(seconds, model_detector=detect_supported_model)
+
+
 def filter_compatible_devices(results: Iterable[ScanResult]) -> tuple[CompatibleDevice, ...]:
-    """Keep only unambiguous, prefix-proven Vivid II advertisements."""
+    """Keep only unambiguous, explicitly supported advertisement prefixes."""
     by_address: dict[str, CompatibleDevice] = {}
     for result in results:
         name = (result.name or "").strip()
-        if detect_model(name) != RGB_VIVID_II_MODEL:
+        model = detect_supported_model(name)
+        if model is None:
             continue
         try:
             address = validate_address(result.address)
         except (AttributeError, TypeError, ValueError):
             continue
-        candidate = CompatibleDevice(name, address, RGB_VIVID_II_MODEL, result.rssi)
+        candidate = CompatibleDevice(name, address, model, result.rssi)
         existing = by_address.get(address)
         if existing is not None and existing.name != candidate.name:
             raise DiscoverySafetyError(
@@ -132,7 +199,7 @@ def preferred_device(
     """Select one discovery safely; discovery never triggers a control operation."""
     if saved is not None:
         for device in devices:
-            if device.address == saved.address and device.name == saved.name:
+            if device.identity == saved.identity and device.name == saved.name and device.model == saved.model:
                 return device
     if len(devices) == 1:
         return devices[0]
@@ -155,20 +222,19 @@ class DevicePreferences:
             model = value.get("model")
             if not all(isinstance(item, str) for item in (name, address, model)):
                 return None
-            if model != RGB_VIVID_II_MODEL or detect_model(name) != RGB_VIVID_II_MODEL:
+            if detect_supported_model(name) is None or detect_supported_model(name) != model:
                 return None
             return CompatibleDevice(name.strip(), validate_address(address), model)
         except (FileNotFoundError, json.JSONDecodeError, OSError, TypeError, ValueError):
             return None
 
     def save(self, device: CompatibleDevice) -> None:
-        if detect_model(device.name) != RGB_VIVID_II_MODEL:
-            raise DiscoverySafetyError("Only a prefix-verified RGB Vivid II can be remembered")
+        ApplicationController._validate_selected_device(device)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(self.path.suffix + ".tmp")
         temporary.write_text(
             json.dumps(
-                {"name": device.name, "address": device.address, "model": device.model},
+                {"name": device.name, "address": device.identity, "model": device.model},
                 indent=2,
                 ensure_ascii=False,
             ),
@@ -202,14 +268,16 @@ class ApplicationController:
         self,
         data_dir: Path | None = None,
         *,
-        scan_func: Callable[[float], Awaitable[list[ScanResult]]] = scan_known_chihiros,
+        scan_func: Callable[[float], Awaitable[list[ScanResult]]] = scan_supported_devices,
         session_factory: Callable[..., Any] | None = None,
+        a2max_session_factory: Callable[..., Any] | None = None,
     ) -> None:
         self.data_dir = data_dir or default_data_dir()
         self.log_dir = self.data_dir / "logs"
         self.preferences = DevicePreferences(self.data_dir / "selected_device.json")
         self._scan_func = scan_func
         self._session_factory = session_factory
+        self._a2max_session_factory = a2max_session_factory
         self._busy = False
         self.logger = create_technical_logger(self.log_dir)
         self.logger.info(
@@ -267,6 +335,8 @@ class ApplicationController:
     ) -> Path:
         values = parse_rgb_inputs(red, green, blue)
         self._validate_selected_device(device)
+        if device.model != RGB_VIVID_II_MODEL:
+            raise DiscoverySafetyError("RGB controls require RGB Vivid II")
         self._begin("apply_rgb")
         try:
             self.logger.info(
@@ -284,15 +354,41 @@ class ApplicationController:
         finally:
             self._finish("apply_rgb")
 
+    async def apply_brightness(self, device: CompatibleDevice, brightness: object) -> Path:
+        level = parse_brightness_input(brightness)
+        self._validate_selected_device(device)
+        if device.model != A2_MAX_MODEL:
+            raise DiscoverySafetyError("Brightness control requires A2 Max")
+        self._begin("apply_brightness")
+        try:
+            kwargs: dict[str, Any] = {}
+            if self._a2max_session_factory is not None:
+                kwargs["session_factory"] = self._a2max_session_factory
+            self.logger.info("brightness_requested name=%s address=%s normalized_wire_level=%d",
+                             device.name, device.address, level)
+            path = await A2MaxController(device.as_core_config(), self.log_dir, **kwargs).manual(level)
+            self.logger.info("brightness_applied session_log=%s", path)
+            return path
+        except BaseException:
+            self.logger.exception("brightness_apply_failed name=%s address=%s", device.name, device.address)
+            raise
+        finally:
+            self._finish("apply_brightness")
+
     @staticmethod
     def _validate_selected_device(device: CompatibleDevice) -> None:
         if (
             not isinstance(device, CompatibleDevice)
-            or device.model != RGB_VIVID_II_MODEL
-            or detect_model(device.name) != RGB_VIVID_II_MODEL
-            or normalize_address(device.address) != validate_address(device.address)
+            or detect_supported_model(device.name) is None
+            or detect_supported_model(device.name) != device.model
+            or not isinstance(device.address, str)
         ):
-            raise DiscoverySafetyError("The selected device is not a verified RGB Vivid II")
+            raise DiscoverySafetyError("The selected device is not a supported model advertisement")
+        try:
+            if normalize_address(device.address) != validate_address(device.address):
+                raise ValueError("Invalid address")
+        except ValueError as exc:
+            raise DiscoverySafetyError("The selected device has an invalid Bluetooth address") from exc
 
     def close(self) -> None:
         self.logger.info("application_stopped")
@@ -304,7 +400,7 @@ class ApplicationController:
 
 def friendly_error(error: BaseException, operation: str) -> str:
     """Translate technical failures for aquarium hobbyists; details remain in logs."""
-    if isinstance(error, RgbValidationError):
+    if isinstance(error, (RgbValidationError, BrightnessValidationError)):
         return str(error)
     if isinstance(error, BusyOperationError):
         return str(error)
@@ -313,8 +409,8 @@ def friendly_error(error: BaseException, operation: str) -> str:
     message = str(error).lower()
     if isinstance(error, TransportSafetyError):
         if "advertisement" in message or "advertised as" in message:
-            return "Could not find the selected Vivid II. Click Scan and try again."
-        return "Unexpected BLE service layout. No command was sent."
+            return "Could not find the selected light. Click Scan and try again."
+        return "BLE safety check failed; the operation stopped. Check the local log before trying again."
     if any(
         marker in message
         for marker in ("in use", "access denied", "unreachable", "0x800700aa", "resource busy")
@@ -327,7 +423,7 @@ def friendly_error(error: BaseException, operation: str) -> str:
         return "Could not scan for Bluetooth lights. Check that Windows Bluetooth is on."
     if operation == "save_selection":
         return "Could not remember the selected device. You can still scan and try again."
-    return "Could not connect to the selected Vivid II. Close My Chihiros and try again."
+    return "Could not complete the operation. Close My Chihiros and check the local diagnostic log."
 
 
 __all__ = [
@@ -335,10 +431,15 @@ __all__ = [
     "ApplicationController",
     "BusyOperationError",
     "CompatibleDevice",
+    "DeviceChoices",
+    "build_device_choices",
     "DevicePreferences",
     "DiscoverySafetyError",
     "DISPLAY_NAME",
     "RgbValidationError",
+    "BrightnessValidationError",
+    "controls_for_device",
+    "parse_brightness_input",
     "filter_compatible_devices",
     "friendly_error",
     "parse_rgb_inputs",

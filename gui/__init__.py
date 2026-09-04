@@ -1,2 +1,1 @@
-"""Native Windows application for safe RGB Vivid II manual control."""
-
+"""Unified local Windows GUI for supported Chihiros manual controls."""

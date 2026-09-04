@@ -9,6 +9,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from chihiros.a2max import (
+    format_a2max_manual_plan,
+    format_a2max_status_dry_run,
+    run_a2max_manual,
+    run_a2max_status_probe,
+    validate_a2max_level,
+)
 from chihiros.backup import BackupError, definition_from_backup, load_backup_document
 from chihiros.constants import RGB_VIVID_II_MODEL
 from chihiros.schedule import (
@@ -62,6 +69,15 @@ def positive_seconds(text: str) -> float:
     return value
 
 
+def a2max_wire_level(text: str) -> int:
+    try:
+        return validate_a2max_level(int(text))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "A2 Max normalized wire level must be an integer from 1 through 100"
+        ) from exc
+
+
 def ramp_value(text: str) -> int:
     try:
         value = int(text)
@@ -100,6 +116,25 @@ def build_parser() -> argparse.ArgumentParser:
     scan = subparsers.add_parser("scan", help="scan for source-known Chihiros advertisements")
     scan.add_argument("--seconds", type=positive_seconds, default=10.0)
     scan.add_argument("--vivid2-only", action="store_true", help="show only verified RGB Vivid II prefixes")
+
+    a2max_probe = subparsers.add_parser(
+        "a2max-status-probe",
+        help="identity-locked one-packet status compatibility probe for the confirmed A2 Max",
+    )
+    add_execution_gate(a2max_probe)
+    a2max_probe.add_argument("--scan-seconds", type=positive_seconds, default=20.0)
+    a2max_probe.add_argument("--connect-timeout", type=positive_seconds, default=30.0)
+    a2max_probe.add_argument("--notification-seconds", type=positive_seconds, default=2.0)
+
+    a2max_manual = subparsers.add_parser(
+        "a2max-manual",
+        help="manual brightness / normalized wire level for the exact locked A2 Max",
+        allow_abbrev=False,
+    )
+    add_execution_gate(a2max_manual)
+    a2max_manual.add_argument("--level", required=True, type=a2max_wire_level, metavar="1-100")
+    a2max_manual.add_argument("--scan-seconds", type=positive_seconds, default=20.0)
+    a2max_manual.add_argument("--connect-timeout", type=positive_seconds, default=30.0)
 
     configure = subparsers.add_parser("configure", help="store an explicitly selected Vivid II locally")
     configure.add_argument("device", help="local alias, for example vivid2")
@@ -171,6 +206,39 @@ def _configured_controller(args: argparse.Namespace) -> Vivid2Controller:
 
 
 async def _run(args: argparse.Namespace) -> int:
+    if args.command == "a2max-manual":
+        if args.dry_run:
+            print(format_a2max_manual_plan(args.level))
+            print("\nDRY RUN: no scan, connection, subscription, read, or characteristic write occurred.")
+            return 0
+        log_path = await run_a2max_manual(
+            args.log_dir.resolve(),
+            level=args.level,
+            scan_seconds=args.scan_seconds,
+            connect_timeout=args.connect_timeout,
+        )
+        print(f"A2 Max manual brightness writes submitted for normalized wire level {args.level}.")
+        print("Write completion is not a device acknowledgement; verify the physical result.")
+        print("Official-app UI percentage equivalence is not universally established.")
+        print("Stored schedule and RTC data were not written.")
+        print(f"Session log: {log_path}")
+        return 0
+
+    if args.command == "a2max-status-probe":
+        print(format_a2max_status_dry_run())
+        if args.dry_run:
+            print("\nDRY RUN: no scan, connection, subscription, or characteristic write occurred.")
+            return 0
+        notifications, log_path = await run_a2max_status_probe(
+            args.log_dir.resolve(),
+            scan_seconds=args.scan_seconds,
+            connect_timeout=args.connect_timeout,
+            notification_seconds=args.notification_seconds,
+        )
+        print(f"Status-only probe completed; received {len(notifications)} NUS TX notification(s).")
+        print(f"Session log: {log_path}")
+        return 0
+
     if args.command == "scan":
         results = await scan_known_chihiros(args.seconds)
         if args.vivid2_only:
@@ -346,7 +414,8 @@ def main(argv: list[str] | None = None) -> int:
         print("Interrupted; the BLE session cleanup path was requested.", file=sys.stderr)
         return 130
     except (BackupError, ConfigurationError, TransportSafetyError, ValueError, OSError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        detail = f"{type(exc).__name__}: {exc!r}" if args.command == "a2max-manual" else str(exc)
+        print(f"Error: {detail}", file=sys.stderr)
         return 2
     except ModuleNotFoundError as exc:
         if exc.name == "bleak":
@@ -354,7 +423,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         raise
     except Exception as exc:
-        print(f"Error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        detail = repr(exc) if args.command == "a2max-manual" else str(exc)
+        print(f"Error: {type(exc).__name__}: {detail}", file=sys.stderr)
         return 2
 
 

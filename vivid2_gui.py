@@ -1,6 +1,6 @@
-"""PyInstaller entry point for the native Windows Vivid II controller."""
+"""Legacy-named entry point for the unified Chihiros Local Controller GUI."""
 
-from gui.app import main
+from chihiros_local_controller import main
 
 
 if __name__ == "__main__":

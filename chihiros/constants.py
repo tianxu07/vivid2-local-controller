@@ -6,7 +6,8 @@ from __future__ import annotations
 UPSTREAM_COMMIT = "05ae7654b3d4de1df887be3827cd85dd33fe0af6"
 UPSTREAM_ROOT = f"https://github.com/TheMicDiet/chihiros-led-control/blob/{UPSTREAM_COMMIT}"
 CONTROLLER_VERSION = "5.0.0"
-WINDOWS_APP_VERSION = "1.0.0"
+WINDOWS_APP_VERSION = "1.1.0"
+DEVELOPMENT_APP_VERSION = WINDOWS_APP_VERSION  # Compatibility for older source integrations.
 
 NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 NUS_RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
@@ -29,6 +30,12 @@ RGB_VIVID_II_MODEL = "RGB Vivid II"
 RGB_VIVID_II_NEW_BLE_LED_PREFIXES = ("DYRGBV",)
 RGB_VIVID_II_SEA_LED_PREFIXES = ("DYNVVD", "DYNV")
 RGB_VIVID_II_PREFIXES = RGB_VIVID_II_NEW_BLE_LED_PREFIXES + RGB_VIVID_II_SEA_LED_PREFIXES
+
+# One physically identified A2 Max advertised with this prefix. This is
+# deliberately not a KNOWN_PREFIX_MODELS entry. The development GUI explicitly
+# opts into this candidate via models.py; it is not universal A2 Max coverage.
+A2_MAX_CANDIDATE_PREFIX = "DYNCMC"
+A2_MAX_CANDIDATE_SAMPLE_COUNT = 1
 
 STATUS_RESPONSE_WAIT_SECONDS = 1.0
 BATCH_WRITE_DELAY_SECONDS = 0.03

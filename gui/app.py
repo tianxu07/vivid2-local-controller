@@ -1,4 +1,4 @@
-"""Responsive Tkinter front end for the Vivid II-only application."""
+"""Shared Tkinter shell with controls selected by supported lamp model."""
 
 from __future__ import annotations
 
@@ -16,7 +16,10 @@ from gui.controller import (
     ApplicationController,
     CompatibleDevice,
     DISPLAY_NAME,
+    build_device_choices,
+    controls_for_device,
     friendly_error,
+    parse_brightness_input,
     parse_rgb_inputs,
     preferred_device,
 )
@@ -46,7 +49,7 @@ class AsyncWorker:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread = threading.Thread(
             target=self._thread_main,
-            name="Vivid2BluetoothWorker",
+            name="ChihirosBluetoothWorker",
             daemon=True,
         )
         self._thread.start()
@@ -120,14 +123,16 @@ class AsyncWorker:
         self._thread.join(timeout=7.0)
 
 
-class Vivid2Application:
+class ChihirosApplication:
     POLL_INTERVAL_MS = 75
 
     def __init__(self, root: tk.Tk, controller: ApplicationController | None = None) -> None:
         self.root = root
         self.controller = controller or ApplicationController()
         self.worker = AsyncWorker()
-        self.devices_by_label: dict[str, CompatibleDevice] = {}
+        self.devices_by_address: dict[str, CompatibleDevice] = {}
+        self.device_addresses: tuple[str, ...] = ()
+        self._selected_address: str | None = None
         self.active_job_id: int | None = None
         self.active_operation: str | None = None
         self.closing = False
@@ -137,9 +142,11 @@ class Vivid2Application:
         self.red_var = tk.IntVar(value=50)
         self.green_var = tk.IntVar(value=50)
         self.blue_var = tk.IntVar(value=50)
+        self.brightness_var = tk.IntVar(value=20)
 
         self._build_window()
         self._load_saved_device()
+        self._refresh_controls()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.after(self.POLL_INTERVAL_MS, self._poll_worker)
 
@@ -162,7 +169,7 @@ class Vivid2Application:
         ttk.Label(outer, text=DISPLAY_NAME, style="Title.TLabel").pack(anchor="w")
         ttk.Label(
             outer,
-            text="Safe, account-free manual color control for RGB Vivid II lights.",
+            text="Local manual control for RGB Vivid II and A2 Max",
             style="Subtitle.TLabel",
         ).pack(anchor="w", pady=(2, 16))
 
@@ -170,14 +177,8 @@ class Vivid2Application:
         device_frame.pack(fill="x")
         button_row = ttk.Frame(device_frame)
         button_row.pack(fill="x")
-        self.scan_button = ttk.Button(button_row, text="Scan for Vivid II", command=self.scan)
+        self.scan_button = ttk.Button(button_row, text="Scan for Lights", command=self.scan)
         self.scan_button.pack(side="left")
-        self.forget_button = ttk.Button(
-            button_row,
-            text="Forget Device",
-            command=self.forget_device,
-        )
-        self.forget_button.pack(side="left", padx=(8, 0))
 
         ttk.Label(device_frame, text="Detected device:").pack(anchor="w", pady=(12, 4))
         self.device_combo = ttk.Combobox(
@@ -189,8 +190,9 @@ class Vivid2Application:
         self.device_combo.pack(fill="x")
         self.device_combo.bind("<<ComboboxSelected>>", self._device_selected)
 
-        rgb_frame = ttk.LabelFrame(outer, text="Manual RGB brightness", padding=12)
-        rgb_frame.pack(fill="x", pady=(14, 0))
+        controls_frame = ttk.Frame(outer)
+        controls_frame.pack(fill="x", pady=(14, 0))
+        self.rgb_frame = rgb_frame = ttk.LabelFrame(controls_frame, text="Manual RGB brightness", padding=12)
         self.scales: list[tk.Scale] = []
         for row, (label, variable, color) in enumerate(
             (
@@ -223,6 +225,19 @@ class Vivid2Application:
             self.scales.append(scale)
         rgb_frame.columnconfigure(1, weight=1)
 
+        self.brightness_frame = ttk.LabelFrame(controls_frame, text="Manual brightness", padding=12)
+        ttk.Label(self.brightness_frame, text="Brightness").pack(anchor="w")
+        self.brightness_scale = tk.Scale(
+            self.brightness_frame, from_=1, to=100, orient="horizontal", resolution=1,
+            showvalue=True, variable=self.brightness_var, highlightthickness=0,
+        )
+        self.brightness_scale.pack(fill="x")
+        ttk.Label(
+            self.brightness_frame,
+            text="DYNCMC candidate: validated on one A2 Max.\nThis slider requests a value; it does not read the current brightness.",
+            foreground="#666666", wraplength=490,
+        ).pack(anchor="w", pady=(6, 0))
+
         action_row = ttk.Frame(outer)
         action_row.pack(fill="x", pady=(16, 0))
         self.apply_button = ttk.Button(
@@ -231,7 +246,9 @@ class Vivid2Application:
             style="Action.TButton",
             command=self.apply_rgb,
         )
-        self.apply_button.pack(fill="x", expand=True, padx=(90, 90))
+        self.apply_brightness_button = ttk.Button(
+            action_row, text="Apply Brightness", style="Action.TButton", command=self.apply_brightness,
+        )
 
         self.smart_plug_label = ttk.Label(
             outer,
@@ -269,21 +286,46 @@ class Vivid2Application:
     def _load_saved_device(self) -> None:
         saved = self.controller.preferences.load()
         if saved is None:
-            self.forget_button.configure(state="disabled")
             return
-        self.devices_by_label = {saved.label: saved}
-        self.device_combo.configure(values=(saved.label,))
-        self.device_var.set(saved.label)
-        self.forget_button.configure(state="normal")
-        self.status_var.set("Saved Vivid II selected. Click Scan to confirm it is nearby.")
+        self._set_devices((saved,))
+        self._select_address(saved.identity)
+        self.status_var.set(f"Saved {saved.model} selected. Click Scan to confirm it is nearby.")
+
+    def _refresh_controls(self) -> None:
+        """Selection changes only visibility; they never submit a BLE operation."""
+        self.rgb_frame.pack_forget()
+        self.brightness_frame.pack_forget()
+        self.apply_button.pack_forget()
+        self.apply_brightness_button.pack_forget()
+        controls = controls_for_device(self._selected_device())
+        if controls == ("Red", "Green", "Blue"):
+            self.rgb_frame.pack(fill="x")
+            self.apply_button.pack(fill="x", expand=True, padx=(90, 90))
+        elif controls == ("Brightness",):
+            self.brightness_frame.pack(fill="x")
+            self.apply_brightness_button.pack(fill="x", expand=True, padx=(90, 90))
+
+    def _set_devices(self, devices: tuple[CompatibleDevice, ...]) -> None:
+        choices = build_device_choices(devices)
+        self._selected_address = None
+        self.device_var.set("")
+        self.devices_by_address = choices.devices_by_address
+        self.device_addresses = choices.addresses
+        self.device_combo.configure(values=choices.labels)
+
+    def _select_address(self, address: str) -> None:
+        """Select a known canonical identity, without matching any display text."""
+        index = self.device_addresses.index(address)
+        self.device_combo.current(index)
+        self._selected_address = self.device_addresses[index]
 
     def _selected_device(self) -> CompatibleDevice | None:
-        return self.devices_by_label.get(self.device_var.get())
+        return self.devices_by_address.get(self._selected_address)
 
     def _require_device(self) -> CompatibleDevice | None:
         device = self._selected_device()
         if device is None:
-            message = "Select a supported RGB Vivid II first. Click Scan to find nearby lights."
+            message = "Select a supported light first. Click Scan to find nearby lights."
             self.status_var.set(message)
             messagebox.showinfo("Select a light", message, parent=self.root)
         return device
@@ -293,15 +335,10 @@ class Vivid2Application:
         combo_state = "disabled" if busy else "readonly"
         self.scan_button.configure(state=button_state)
         self.apply_button.configure(state=button_state)
+        self.apply_brightness_button.configure(state=button_state)
         self.device_combo.configure(state=combo_state)
-        for scale in self.scales:
+        for scale in (*self.scales, self.brightness_scale):
             scale.configure(state=button_state)
-        if busy:
-            self.forget_button.configure(state="disabled")
-        else:
-            self.forget_button.configure(
-                state="normal" if self.controller.preferences.load() is not None else "disabled"
-            )
 
     def _submit(self, operation: str, coroutine: Coroutine[Any, Any, Any]) -> None:
         if self.active_job_id is not None:
@@ -318,7 +355,7 @@ class Vivid2Application:
             self._show_error(exc, operation)
 
     def scan(self) -> None:
-        self.status_var.set("Scanning for nearby RGB Vivid II lights…")
+        self.status_var.set("Scanning for supported Chihiros lights…")
         self._submit("scan", self.controller.scan())
 
     def apply_rgb(self) -> None:
@@ -338,24 +375,28 @@ class Vivid2Application:
             self.controller.apply_rgb(device, red, green, blue),
         )
 
-    def forget_device(self) -> None:
-        if self.active_job_id is not None:
+    def apply_brightness(self) -> None:
+        device = self._require_device()
+        if device is None:
             return
-        self.controller.preferences.forget()
-        self.devices_by_label.clear()
-        self.device_combo.configure(values=())
-        self.device_var.set("")
-        self.forget_button.configure(state="disabled")
-        self.status_var.set("Saved device forgotten. Click Scan to choose a light.")
+        try:
+            level = parse_brightness_input(self.brightness_var.get())
+        except BaseException as exc:
+            self._show_error(exc, "apply_brightness")
+            return
+        self.status_var.set("Connecting and applying brightness…")
+        self._submit("apply_brightness", self.controller.apply_brightness(device, level))
 
     def _device_selected(self, _event: object = None) -> None:
+        index = self.device_combo.current()
+        self._selected_address = self.device_addresses[index] if 0 <= index < len(self.device_addresses) else None
+        self._refresh_controls()
         device = self._selected_device()
         if device is None:
             return
         try:
             self.controller.preferences.save(device)
-            self.forget_button.configure(state="normal")
-            self.status_var.set(f"Selected {device.name}. Ready to apply RGB.")
+            self.status_var.set(f"Selected {device.model} — {device.name}. Ready.")
         except OSError as exc:
             self.controller.logger.exception("preference_save_failed")
             self._show_error(exc, "save_selection")
@@ -379,38 +420,34 @@ class Vivid2Application:
                     f"RGB applied successfully: R={self.red_var.get()} "
                     f"G={self.green_var.get()} B={self.blue_var.get()}"
                 )
+            elif operation == "apply_brightness":
+                self.status_var.set(f"Brightness {self.brightness_var.get()} sent. Verify the visible result.")
         self.root.after(self.POLL_INTERVAL_MS, self._poll_worker)
 
     def _scan_completed(self, devices: tuple[CompatibleDevice, ...]) -> None:
         saved = self.controller.preferences.load()
-        self.devices_by_label = {device.label: device for device in devices}
-        labels = tuple(self.devices_by_label)
-        self.device_combo.configure(values=labels)
-        chosen = preferred_device(devices, saved)
-        if chosen is None:
-            self.device_var.set("")
-        else:
-            self.device_var.set(chosen.label)
+        self._set_devices(devices)
+        chosen = preferred_device(tuple(self.devices_by_address.values()), saved)
+        if chosen is not None:
+            self._select_address(chosen.identity)
             try:
                 self.controller.preferences.save(chosen)
             except OSError:
                 self.controller.logger.exception("preference_save_failed")
-        self.forget_button.configure(
-            state="normal" if self.controller.preferences.load() is not None else "disabled"
-        )
+        self._refresh_controls()
         if not devices:
-            message = "No supported RGB Vivid II was found. Move closer and scan again."
+            message = "No supported light was found. Move closer and scan again."
             self.status_var.set(message)
-            messagebox.showinfo("No Vivid II found", message, parent=self.root)
+            messagebox.showinfo("No supported light found", message, parent=self.root)
         elif chosen is not None:
             self.status_var.set(f"Found and selected {chosen.name}. Ready.")
         else:
-            self.status_var.set(f"Found {len(devices)} Vivid II lights. Choose one from the list.")
+            self.status_var.set(f"Found {len(devices)} supported lights. Choose one from the list.")
 
     def _show_error(self, error: BaseException, operation: str) -> None:
         message = friendly_error(error, operation)
         self.status_var.set(f"Error: {message}")
-        messagebox.showerror("Vivid II Controller", message, parent=self.root)
+        messagebox.showerror(DISPLAY_NAME, message, parent=self.root)
 
     def close(self) -> None:
         if self.closing:
@@ -422,9 +459,13 @@ class Vivid2Application:
         self.root.destroy()
 
 
+# Source compatibility for existing launchers and Vivid II regression tests.
+Vivid2Application = ChihirosApplication
+
+
 def main() -> int:
     root = tk.Tk()
-    Vivid2Application(root)
+    ChihirosApplication(root)
     root.mainloop()
     return 0
 

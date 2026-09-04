@@ -1,141 +1,119 @@
-# Vivid2Controller
+# Chihiros Local Controller 1.1.0
 
-A small, fully local Windows application for setting manual red, green, and
-blue brightness on supported Chihiros RGB Vivid II aquarium lights.
+A local Windows application for manual control of Chihiros aquarium lights
+directly over Bluetooth Low Energy. No Chihiros account, login, internet
+connection or Chihiros cloud service is required.
 
 **Unofficial community tool. Not affiliated with Chihiros Aquatic Studio.**
-“Chihiros” and related product names are trademarks of their respective owners.
-This project does not use the Chihiros logo or official artwork.
 
 Created by **Tianxu Yang** · Instagram: **[@tianxu_07](https://www.instagram.com/tianxu_07/)**
 
-## What it does
+## Supported lights
 
-The Windows GUI provides one intentionally narrow workflow:
+- **Chihiros RGB Vivid II:** manual Red / Green / Blue sliders, 0–100.
+  Existing verified advertisement prefixes: `DYNV`, `DYNVVD`, `DYRGBV`.
+- **Chihiros A2 Max:** one manual Brightness slider, 1–100.
+  The `DYNCMC` implementation has been physically validated on one A2 Max unit.
+  Compatibility with every hardware/firmware revision, or all A2 Max prefixes,
+  is **not guaranteed**. Brightness is a normalized wire level internally, not
+  a universal claim of exact official-app percentage equivalence.
 
-1. Click **Scan for Vivid II**.
-2. Select the intended light if more than one is found.
-3. Set **Red**, **Green**, and **Blue** from 0 to 100.
-4. Click **Apply RGB**.
-
-The application connects locally over Bluetooth Low Energy, enters manual mode,
-writes the three RGB values, and disconnects. No Chihiros account, vendor app,
-internet connection, or cloud service is required.
-
-Use a physical switch or smart plug for actual power control.
-
-## Supported scope
-
-Version 1 supports only source-verified **RGB Vivid II** advertisement families:
-
-- `DYNV…`
-- `DYNVVD…`
-- `DYRGBV…`
-
-An unrelated device is not accepted merely because it exposes Nordic UART.
-Device addresses and GATT handles are discovered at runtime and are not
-hardcoded.
-
-The public GUI provides **manual RGB only**. It does not provide:
-
-- schedule or Auto-mode editing;
-- clock/RTC changes;
-- firmware updates, DFU, bootloader, reset, pairing reset, or rename functions;
-- arbitrary packet or command entry.
-
-The FE59 DFU service and Buttonless DFU characteristic are permanently
-blacklisted. BLE writes are restricted to the RX characteristic found as a
-direct child of the one validated Nordic UART service.
+An unrelated Nordic UART device is never accepted just because it exposes NUS.
+Multiple lights, including multiple devices of the same model or identical
+advertised names, remain distinct by their full BLE addresses. Dropdown labels
+show the model and a short address suffix, extended when needed for uniqueness.
+Labels are presentation only, never device identity keys.
 
 ## Download and run
 
-Windows 10 or Windows 11 with a Bluetooth Low Energy adapter is required.
-Python is not required for a packaged release.
-
-From the GitHub **Releases** page, download the recommended file:
+Windows 10/11 x64 with Bluetooth LE is required. Python is not required for the
+packaged application. The recommended package is:
 
 ```text
-Vivid2Controller-1.0.0-windows-x64.zip
+ChihirosLocalController-1.1.0-windows-x64.zip
 ```
 
-Extract the complete ZIP, open the `Vivid2Controller` folder, and double-click
-`Vivid2Controller.exe`. Do not move the EXE away from its `_internal` folder.
+Extract the **entire ZIP**, open the `ChihirosLocalController` folder, and run
+`ChihirosLocalController.exe`. Keep its `_internal` directory alongside it.
 
-An optional single-file EXE may also be attached to a release. It is convenient
-but can start more slowly because it extracts its runtime on each launch.
+The optional `ChihirosLocalController-1.1.0-windows-x64-onefile.exe` includes the
+runtime in one executable; extraction can make startup slower. Verify the
+artifact against `SHA256SUMS.txt`. The application is unsigned; Windows may
+show a SmartScreen warning. Only run a copy from a source you trust.
 
-This project is not currently code-signed, so Windows SmartScreen may show an
-unknown-publisher warning. Verify the release checksum before running it.
+## Normal workflow
 
-## Privacy and local data
+1. Close My Chihiros on nearby phones/tablets.
+2. Enable Windows Bluetooth and power the intended lights nearby.
+3. Launch Chihiros Local Controller.
+4. Click **Scan for Lights**.
+5. Select the desired supported light.
+6. Adjust Red/Green/Blue for Vivid II, or Brightness for A2 Max.
+7. Click **Apply RGB** or **Apply Brightness**.
+8. Select another supported light if needed, adjust its controls, and Apply.
 
-The application has no account or cloud integration. If a device is selected,
-it stores only the advertised name, Bluetooth address, and detected model in:
+Scanning, selection and slider movement never send control commands. One
+operation runs at a time. Slider values are requested inputs shared between
+devices, not readings of the currently selected lamp. Each Apply revalidates
+the exact selected address, advertised name and model before control.
 
-```text
-%LOCALAPPDATA%\Vivid2Controller\selected_device.json
-```
+Manual settings may persist on the physical device, including across power
+loss. Manual operation overrides automatic operation; the GUI does not edit
+stored schedules. To resume a normal schedule-driven configuration, use My
+Chihiros after the local connection has ended. Recovery through the official
+app was verified on the tested units; this is not a guarantee for every revision.
 
-The **Forget Device** button removes that selection. Diagnostic logs are stored
-locally under `%LOCALAPPDATA%\Vivid2Controller\logs` and are never uploaded by
-the application.
+Use a physical switch or smart plug for normal on/off timing. The GUI has no
+Off button, manual clear/reset control, schedule editor, RTC, auto-mode control,
+firmware/DFU, pairing reset, rename or raw-packet entry.
+
+## Safety and privacy
+
+RX/TX endpoints must be direct children of the unique validated NUS service.
+Endpoint topology is checked before each write. The complete FE59/DFU subtree
+is permanently blacklisted. Handles are diagnostics only, not endpoint selectors.
+There is no pairing, firmware access, guessed rollback or automatic write retry.
+
+The last selected device is remembered locally. For compatibility with v1.0.0,
+the existing per-user `%LOCALAPPDATA%\Vivid2Controller` data directory is retained.
+Local diagnostics include device identity and transaction details; they are
+never uploaded. Review/redact diagnostics before sharing them. Saved preferences,
+logs, captures and research files are not included in the Windows package.
 
 ## Troubleshooting
 
-- Make sure Windows Bluetooth is on and the light is powered and nearby.
-- Fully close My Chihiros on phones or tablets; many BLE devices allow only one
-  active client.
-- Do not pair the light manually in Windows Settings. The application connects
-  without pairing.
-- If no supported device appears, move closer and scan again.
-- If the app reports an unexpected BLE service layout, it deliberately sent no
-  command. Keep the local diagnostic log when reporting the problem.
-- If a saved light is no longer available, click **Forget Device**, then scan
-  again.
+- Keep the lamp nearby and close other apps holding its BLE connection.
+- Do not pair the lamp manually in Windows Settings.
+- If a saved device is unavailable, Scan and select the intended light again.
+- A failed write may still have reached the lamp. Check the local diagnostics
+  and physical result before deciding whether to try again.
+- Use one application window at a time.
 
-## Build from source
+## From source
 
-For development, use Python 3.10 or newer on Windows:
+From the repository root in a Windows Python environment:
 
 ```powershell
-py -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
-.\.venv\Scripts\python.exe -m unittest discover -s tests
-.\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean Vivid2Controller.spec
+python -m pip install -r requirements-build.txt
+python -m unittest discover -s tests
+python .\chihiros_local_controller.py
 ```
 
-The preferred build is written to
-`dist\Vivid2Controller\Vivid2Controller.exe`. The optional single-file build is:
+The old `vivid2_gui.py` launcher is only a compatibility shim for the same GUI.
 
-```powershell
-.\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean `
-  --distpath dist-single --workpath build-single Vivid2Controller-onefile.spec
-```
+For local builds, see [packaging preparation](docs/releasing.md).
+[GUI implementation](docs/windows-app.md) and
+[validation notes](docs/gui-development.md) describe the tested scope.
 
-Generated binaries and build directories are intentionally excluded from source
-control. See [docs/releasing.md](docs/releasing.md) for the release-asset layout
-and [docs/windows-app.md](docs/windows-app.md) for implementation details.
+## Credits and license
 
-## Credits and acknowledgements
+This project uses and adapts work from
+[TheMicDiet/chihiros-led-control](https://github.com/TheMicDiet/chihiros-led-control).
+The pinned upstream MIT copyright and license, and notices for Bleak, PyWinRT,
+CPython, Tcl/Tk and PyInstaller, are preserved in
+[THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt) and the packaged notices.
 
-Vivid2Controller uses and adapts implementation details and code from
-[TheMicDiet/chihiros-led-control](https://github.com/TheMicDiet/chihiros-led-control),
-which is distributed under the MIT License. That upstream project and its author
-have not endorsed, sponsored, or affiliated themselves with this application.
-Its original copyright and complete MIT notice are preserved in
-[THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).
-
-The packaged Windows application also uses
-[Bleak](https://github.com/hbldh/bleak),
-[PyWinRT](https://github.com/pywinrt/pywinrt), CPython, Tcl/Tk, and the
-PyInstaller bootloader. Applicable notices are shipped with the recommended
-one-folder distribution and summarized in `THIRD_PARTY_LICENSES.txt`.
-
-## License
-
-Original Vivid2Controller code is released under the
-[MIT License](LICENSE), copyright © 2026 Tianxu Yang. Third-party components
-remain subject to their respective licenses.
-
-This software is provided “as is,” without warranty. Use it at your own risk,
-especially around aquarium equipment and livestock.
+Original project code is under the [MIT License](LICENSE),
+copyright © 2026 Tianxu Yang. Third-party components retain their own terms.
+Product names belong to their respective owners; no Chihiros logos or
+proprietary artwork are used. This software is provided “as is,” without warranty.

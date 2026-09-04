@@ -1,119 +1,78 @@
-# Vivid2Controller v1.0.0
+Chihiros Local Controller 1.1.0
+==============================
 
-Unofficial local Windows controller for Chihiros RGB Vivid II.
+Unofficial community tool. Not affiliated with Chihiros Aquatic Studio.
 
 Created by Tianxu Yang
 Instagram: @tianxu_07
 
-## WHAT THIS APP DOES
+SUPPORTED MODELS
 
-Vivid2Controller allows you to control the manual RGB brightness of a supported
-Chihiros RGB Vivid II directly from a Windows PC using Bluetooth Low Energy.
+- Chihiros RGB Vivid II: manual Red / Green / Blue, each 0-100.
+- Chihiros A2 Max: manual Brightness, 1-100.
 
-No My Chihiros account or cloud connection is required.
+A2 Max support has been physically validated on one DYNCMC A2 Max unit.
+Compatibility with every hardware/firmware revision is not guaranteed.
+Brightness is a normalized wire level, not a guarantee of exact equivalence
+to official-app percentages. Unrelated Nordic UART devices are not supported.
 
-Current features:
+START
 
-- Scan for nearby supported RGB Vivid II lights
-- Select your light
-- Set Red / Green / Blue individually from 0 to 100
-- Apply the RGB settings directly over Bluetooth
+Extract the entire recommended ZIP. Open the ChihirosLocalController folder
+and run ChihirosLocalController.exe. Keep the _internal directory beside it.
+The optional one-file executable extracts its runtime and may start slower.
 
-This version is intentionally limited to manual RGB control.
+WORKFLOW
 
-It does NOT provide:
+1. Close My Chihiros on nearby phones/tablets.
+2. Enable Windows Bluetooth and power the intended lights nearby.
+3. Launch Chihiros Local Controller.
+4. Click Scan for Lights.
+5. Select the desired supported light.
+6. Adjust its RGB or Brightness controls.
+7. Click Apply RGB or Apply Brightness.
+8. Select another supported light, adjust its controls, and Apply as needed.
 
-- Schedule editing
-- Firmware updates
-- DFU
-- Factory reset
-- Pairing reset
+No Chihiros account, login, internet or Chihiros cloud service is required.
+Control is direct over Bluetooth LE. Do not pair manually in Windows Settings.
+Use one application window at a time.
 
-## BEFORE USING
+Multiple lights of the same model remain distinct by full BLE address.
+The dropdown shows model plus a short unique address suffix. Names/labels
+are never used as device identity keys. Selection and moving sliders send
+nothing. Values are requested inputs, not current brightness readings.
+Only the last selected device is remembered locally.
 
-Make sure:
+IMPORTANT
 
-1. Your RGB Vivid II is powered on.
-2. Bluetooth is enabled on your Windows PC.
-3. Close the My Chihiros app on nearby phones before using this controller.
+Manual settings may persist on the lamp, including through power loss.
+Manual operation overrides automatic operation. To resume your normal
+schedule-driven configuration, use My Chihiros after the local connection ends.
+Use a physical switch or smart plug for normal on/off timing.
 
-This is recommended because the phone and Windows PC may otherwise compete for
-the same Bluetooth connection.
+The GUI has no Off button, clear/reset control, schedule editor, RTC,
+auto-mode control, firmware/DFU, pairing reset, rename or raw-packet interface.
+FE59/DFU is permanently blacklisted; writes use only validated service-scoped NUS.
+There is no automatic write retry. A failed write may still have reached the lamp.
 
-If the controller has trouble finding or connecting to the light, temporarily
-turn off Bluetooth on the phone that normally controls the Vivid II and try
-again.
+PRIVACY AND TROUBLESHOOTING
 
-## HOW TO USE
+The existing per-user data directory is retained for v1.0.0 preference compatibility.
+Selection and diagnostic files stay local and are not uploaded. Diagnostics may
+contain device identifiers; review/redact them before sharing.
 
-1. Extract the entire ZIP file.
+If a device is unavailable, scan again and select the intended light.
+Keep lights nearby and close any other app holding the Bluetooth connection.
+Check the physical result and local diagnostics after any failure.
 
-2. Run:
+This application is unsigned. Windows may show a SmartScreen warning.
+Verify the download against SHA256SUMS.txt and only run a copy you trust.
 
-   Vivid2Controller.exe
+LICENSES
 
-3. Click:
+LICENSE contains our MIT license and copyright notice.
+THIRD_PARTY_LICENSES.txt preserves upstream chihiros-led-control MIT attribution
+and required third-party notices. Additional runtime license files are included.
+No Chihiros logo or proprietary artwork is used.
 
-   Scan for Vivid II
-
-4. Select your RGB Vivid II from the detected device list.
-
-5. Set Red, Green, and Blue to values between 0 and 100.
-
-6. Click:
-
-   Apply RGB
-
-The controller will connect to the light, apply the RGB values, and disconnect
-automatically.
-
-Applying non-zero RGB values will also turn on a powered Vivid II in Manual mode.
-
-Use a physical switch or smart plug if you want to control power on/off.
-
-## IMPORTANT
-
-Manual RGB settings may override the light's automatic mode while active.
-
-This application does not modify firmware and does not use the firmware-update
-or DFU interface.
-
-Do not run multiple Bluetooth controllers for the same light at the same time.
-
-## WINDOWS SMARTSCREEN
-
-Because this application is currently unsigned, Windows SmartScreen may display
-a warning when you run it for the first time.
-
-If you trust the copy you received, you may need to select:
-
-More info -> Run anyway
-
-## PRIVACY
-
-Vivid2Controller works locally over Bluetooth.
-
-It does not require:
-
-- A Chihiros account
-- Chihiros cloud services
-- Login credentials
-
-## DISCLAIMER
-
-This is an unofficial community tool and is not affiliated with, endorsed by,
-or supported by Chihiros Aquatic Studio.
-
-Use at your own discretion.
-
-## OPEN-SOURCE CREDITS
-
-Parts of the Bluetooth protocol implementation are based on open-source work
-from the chihiros-led-control project by TheMicDiet.
-
-See THIRD_PARTY_LICENSES.txt for license and attribution information.
-
-## AUTHOR
-
-Tianxu Yang
-Instagram: @tianxu_07
+Provided as is, without warranty. Use at your own discretion.
