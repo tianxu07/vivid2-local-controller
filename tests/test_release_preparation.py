@@ -17,6 +17,7 @@ import chihiros_local_controller
 import vivid2_gui
 from chihiros import a2max
 from chihiros.constants import WINDOWS_APP_VERSION, DEVELOPMENT_APP_VERSION
+from chihiros.models import SUPPORTED_MODELS
 from gui import app
 from gui.controller import DISPLAY_NAME
 
@@ -27,12 +28,28 @@ spec.loader.exec_module(audit)
 
 
 class ReleaseMetadataTests(unittest.TestCase):
-    def test_source_version_and_title_are_v120_final(self) -> None:
-        self.assertEqual(WINDOWS_APP_VERSION, "1.2.0")
+    def test_release_contains_exactly_the_six_validated_models(self) -> None:
+        self.assertEqual(
+            {model.name: (model.controls, model.minimum, model.maximum) for model in SUPPORTED_MODELS},
+            {
+                "RGB Vivid II": (("Red", "Green", "Blue"), 0, 100),
+                "A2 Max": (("Brightness",), 1, 100),
+                "Magnetic Light II": (("Red", "Green", "Blue", "White"), 0, 100),
+                "Magnetic Light": (("Red", "Green"), 0, 100),
+                "Cooling Fan": (("Fan",), 0, 20),
+                "Z Light": (("Cool White", "Warm White"), 0, 100),
+            },
+        )
+
+    def test_source_version_and_title_are_v130(self) -> None:
+        self.assertEqual(WINDOWS_APP_VERSION, "1.3.0")
         self.assertEqual(DEVELOPMENT_APP_VERSION, WINDOWS_APP_VERSION)
         self.assertEqual(DISPLAY_NAME, "Chihiros Local Controller")
         text = (ROOT / "gui" / "app.py").read_text(encoding="utf-8")
-        self.assertIn("Local manual control for RGB Vivid II, A2 Max and Magnetic Light II", text)
+        self.assertIn(
+            "Local control for supported Chihiros lights and DYNFAN Cooling Fan",
+            text,
+        )
         self.assertNotIn("development support", text)
         self.assertIn("Unofficial community tool. Not affiliated with Chihiros Aquatic Studio.", text)
         self.assertIn("Created by Tianxu Yang", text)
@@ -67,29 +84,35 @@ class ReleaseMetadataTests(unittest.TestCase):
 
     def test_binary_version_resource_matches_final_application(self) -> None:
         text = (ROOT / "packaging" / "version_info.txt").read_text(encoding="utf-8")
-        self.assertIn("filevers=(1, 2, 0, 0)", text)
-        self.assertIn("prodvers=(1, 2, 0, 0)", text)
+        self.assertIn("filevers=(1, 3, 0, 0)", text)
+        self.assertIn("prodvers=(1, 3, 0, 0)", text)
         self.assertIn(f"StringStruct(u'FileVersion', u'{WINDOWS_APP_VERSION}')", text)
         self.assertIn(f"StringStruct(u'ProductVersion', u'{WINDOWS_APP_VERSION}')", text)
         self.assertIn("u'ChihirosLocalController.exe'", text)
         self.assertIn("u'Chihiros Local Controller'", text)
         self.assertNotIn("1.0.0", text)
 
-    def test_public_readmes_document_three_models_and_release_limits(self) -> None:
+    def test_public_readmes_document_supported_models_and_release_limits(self) -> None:
         for filename in ("README.md", "README.txt"):
             text = (ROOT / filename).read_text(encoding="utf-8")
             with self.subTest(filename=filename):
-                for required in ("1.2.0", "RGB Vivid II", "A2 Max", "DYNCMC", "ChihirosLocalController.exe",
+                for required in ("1.3.0", "RGB Vivid II", "A2 Max", "DYNCMC", "ChihirosLocalController.exe",
                                  "Magnetic Light II", "DYMNC", "Apply WRGB",
+                                 "Magnetic Light", "DYCX", "Apply RG",
+                                 "Cooling Fan", "DYNFAN", "Refresh Status",
+                                 "Z Light", "DYSSD", "Cool White", "Warm White", "Apply White",
+                                 "Apply Manual", "Apply Automatic", "device-side",
+                                 "Threshold read-back", "Silent Mode",
+                                 "physically validated on a real device",
                                  "three Magnetic Light II units", "photometric", "linearity",
-                                 "ChihirosLocalController-1.2.0-windows-x64.zip",
-                                 "ChihirosLocalController-1.2.0-windows-x64-onefile.exe",
-                                 "Scan for Lights", "Apply RGB", "Apply Brightness", "smart plug",
+                                 "ChihirosLocalController-1.3.0-windows-x64.zip",
+                                 "ChihirosLocalController-1.3.0-windows-x64-onefile.exe",
+                                 "Scan for Devices", "Apply RGB", "Apply Brightness", "smart plug",
                                  "THIRD_PARTY_LICENSES.txt", "Tianxu Yang", "@tianxu_07"):
                     self.assertIn(required, text)
                 self.assertIn("not guaranteed", text.replace("**", ""))
                 self.assertNotIn("1.1.0.dev1", text)
-                self.assertNotIn("1.2.0.dev1", text)
+                self.assertNotIn("1.3.0.dev1", text)
 
     def test_builder_requires_fresh_versioned_paths_and_has_no_publication_step(self) -> None:
         text = (ROOT / "packaging" / "build_release.ps1").read_text(encoding="utf-8")

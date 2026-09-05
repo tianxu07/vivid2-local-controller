@@ -9,13 +9,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from chihiros.constants import (
+    COOLING_FAN_MODEL,
     DFU_BUTTONLESS_UUID,
     DFU_SERVICE_UUID,
+    MAGNETIC_II_MODEL,
+    MAGNETIC_LIGHT_MODEL,
     NUS_RX_UUID,
     NUS_SERVICE_UUID,
     NUS_TX_UUID,
     RGB_VIVID_II_MODEL,
+    Z_LIGHT_MODEL,
 )
+from chihiros.models import A2_MAX_MODEL
 from chihiros.transport import (
     DeviceConfig,
     LocalSessionLog,
@@ -299,7 +304,7 @@ class GuiCoreIntegrationTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 controller.close()
             data = json.loads(log_path.read_text(encoding="utf-8"))
-            self.assertEqual(data["application"]["application_version"], "1.2.0")
+            self.assertEqual(data["application"]["application_version"], "1.3.0")
             self.assertIn("controller_version", data["application"])
             self.assertIn("windows_version", data["application"])
             self.assertEqual(data["device"]["name"], "DYNVLOG")
@@ -365,6 +370,70 @@ class StartupLayoutTests(unittest.TestCase):
                     )
         finally:
             application.close()
+
+    def test_shared_footer_remains_visible_for_every_supported_device_view(self) -> None:
+        try:
+            root = tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest(f"Tk display is unavailable: {exc}")
+
+        root.attributes("-alpha", 0.0)
+        with tempfile.TemporaryDirectory() as directory:
+            controller = ApplicationController(Path(directory))
+            application = app.ChihirosApplication(root, controller=controller)
+            devices = tuple(
+                CompatibleDevice(name, f"02:00:00:30:00:{index:02X}", model)
+                for index, (name, model) in enumerate(
+                    (
+                        ("DYNV_SYNTHETIC", RGB_VIVID_II_MODEL),
+                        ("DYNCMC_SYNTHETIC", A2_MAX_MODEL),
+                        ("DYMNC_SYNTHETIC", MAGNETIC_II_MODEL),
+                        ("DYCX_SYNTHETIC", MAGNETIC_LIGHT_MODEL),
+                        ("DYNFAN_SYNTHETIC", COOLING_FAN_MODEL),
+                        ("DYSSD_SYNTHETIC", Z_LIGHT_MODEL),
+                    ),
+                    start=1,
+                )
+            )
+            try:
+                application._scan_completed(devices)
+                root.geometry(
+                    f"{app.DEFAULT_WINDOW_WIDTH}x{app.MINIMUM_WINDOW_HEIGHT}"
+                )
+                root.update()
+                footer_identity = str(application.footer_frame)
+                for device in devices:
+                    with self.subTest(model=device.model):
+                        application.device_combo.current(
+                            application.device_addresses.index(device.identity)
+                        )
+                        application._device_selected()
+                        root.update()
+
+                        self.assertEqual(str(application.footer_frame), footer_identity)
+                        self.assertIs(application.disclaimer_label.master, application.footer_frame)
+                        self.assertIs(application.author_label.master, application.footer_frame)
+                        self.assertEqual(
+                            application.disclaimer_label.cget("text"),
+                            "Unofficial community tool. Not affiliated with Chihiros Aquatic Studio.",
+                        )
+                        self.assertEqual(
+                            application.author_label.cget("text"),
+                            "Created by Tianxu Yang · Instagram: @tianxu_07",
+                        )
+                        root_bottom = root.winfo_rooty() + root.winfo_height()
+                        for widget in (
+                            application.footer_frame,
+                            application.disclaimer_label,
+                            application.author_label,
+                        ):
+                            self.assertTrue(widget.winfo_ismapped())
+                            self.assertLessEqual(
+                                widget.winfo_rooty() + widget.winfo_height(),
+                                root_bottom,
+                            )
+            finally:
+                application.close()
 
 
 if __name__ == "__main__":

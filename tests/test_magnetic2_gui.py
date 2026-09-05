@@ -189,7 +189,7 @@ class MagneticAdapterTests(unittest.TestCase):
                 self.assertEqual([e[1] for e in self.fixture.events if e[0] == "gap"], [0.030] * 4)
                 report = json.loads(path.read_text())
                 self.assertEqual(report["device"]["address"], selected.identity)
-                self.assertEqual(report["application"]["application_version"], "1.2.0")
+                self.assertEqual(report["application"]["application_version"], "1.3.0")
                 self.assertEqual(report["events"][-1]["send_calls_completed"], 5)
                 self.assertFalse(self.controller.busy)
 

@@ -16,6 +16,7 @@ from .constants import (
     BLACKLISTED_SERVICE_UUIDS,
     DFU_SERVICE_UUID,
     CONTROLLER_VERSION,
+    FAN_MANUAL_SPEED_MAX,
     NUS_RX_UUID,
     NUS_SERVICE_UUID,
     NUS_TX_UUID,
@@ -358,9 +359,15 @@ def validate_phase4_command(command: Command) -> None:
         allowed = parameters in {
             bytes([0x0B, 0xFF, 0xFF]),
             bytes([0x12, 0xFF, 0xFF]),
+            bytes([0x22, 0xFF, 0xFF]),
+            bytes([0x23, 0xFF, 0xFF]),
         }
     elif packet[0] == 0x5A and mode == 0x07 and len(parameters) == 2:
-        allowed = parameters[0] in {0, 1, 2} and 0 <= parameters[1] <= 100
+        target, level = parameters
+        allowed = (
+            (target in {0, 1, 2} and level <= 100)
+            or (target == 0xFF and level <= FAN_MANUAL_SPEED_MAX)
+        )
     elif packet[0] == 0x5A and mode == 0x06 and len(parameters) == 4:
         channel, hour, minute, level = parameters
         allowed = (
@@ -398,6 +405,11 @@ def validate_phase4_command(command: Command) -> None:
             and blue <= 100
             and parameters[9:] == bytes([0xFF] * 5)
         )
+    elif packet[0] == 0xA5 and mode == 0x04:
+        allowed = parameters in {bytes([0x06]), bytes([0x08])}
+    elif packet[0] == 0xA5 and mode == 0x21 and len(parameters) == 3:
+        start_temperature, max_temperature, trailing = parameters
+        allowed = max_temperature > start_temperature and trailing == 0xFF
     if not allowed:
         raise TransportSafetyError(
             f"Packet 0x{packet[0]:02X}/0x{mode:02X} is outside the public command whitelist"

@@ -12,12 +12,25 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterable
 
-from chihiros.constants import MAGNETIC_II_MODEL, RGB_VIVID_II_MODEL, WINDOWS_APP_VERSION
+from chihiros.constants import (
+    COOLING_FAN_MODEL,
+    FAN_MANUAL_SPEED_MAX,
+    FAN_MANUAL_SPEED_MIN,
+    MAGNETIC_II_MODEL,
+    MAGNETIC_LIGHT_MODEL,
+    RGB_VIVID_II_MODEL,
+    WINDOWS_APP_VERSION,
+    Z_LIGHT_MODEL,
+)
 from chihiros.models import A2_MAX_MODEL, detect_supported_model, supported_model
 from chihiros.a2max_controller import A2MaxController
 from chihiros.a2max_protocol import validate_a2max_level
+from chihiros.magnetic1_controller import Magnetic1Controller
+from chihiros.magnetic1_protocol import validate_rg_levels
 from chihiros.magnetic2_controller import Magnetic2Controller
 from chihiros.magnetic2_protocol import validate_wrgb_levels
+from chihiros.fan_controller import CoolingFanController, CoolingFanTelemetry
+from chihiros.fan_protocol import validate_fan_speed, validate_fan_temperatures
 from chihiros.protocol import validate_level
 from chihiros.transport import (
     DeviceConfig,
@@ -28,6 +41,8 @@ from chihiros.transport import (
     validate_address,
 )
 from chihiros.vivid2 import Vivid2Controller
+from chihiros.zlight_controller import ZLightController
+from chihiros.zlight_protocol import validate_white_levels
 
 
 APP_NAME = "Vivid2Controller"
@@ -46,6 +61,22 @@ class BrightnessValidationError(ValueError):
 
 class WrgbValidationError(RgbValidationError):
     """Raised before Bluetooth use when a Magnetic II WRGB value is invalid."""
+
+
+class RgValidationError(RgbValidationError):
+    """Raised before Bluetooth use when an original Magnetic Light RG value is invalid."""
+
+
+class FanSpeedValidationError(ValueError):
+    """Raised before Bluetooth use when manual Cooling Fan speed is invalid."""
+
+
+class FanTemperatureValidationError(ValueError):
+    """Raised before Bluetooth use when thermostat temperatures are invalid."""
+
+
+class WhiteValidationError(ValueError):
+    """Raised before Bluetooth use when a Z Light white value is invalid."""
 
 
 class BusyOperationError(RuntimeError):
@@ -73,7 +104,10 @@ class CompatibleDevice:
     def as_core_config(self) -> DeviceConfig:
         return DeviceConfig(
             alias={RGB_VIVID_II_MODEL: "selected_vivid2", A2_MAX_MODEL: "selected_a2max",
-                   MAGNETIC_II_MODEL: "selected_magnetic2"}.get(self.model, "selected_device"),
+                   MAGNETIC_LIGHT_MODEL: "selected_magnetic1",
+                   MAGNETIC_II_MODEL: "selected_magnetic2",
+                   COOLING_FAN_MODEL: "selected_fan",
+                   Z_LIGHT_MODEL: "selected_zlight"}.get(self.model, "selected_device"),
             model=self.model,
             name=self.name,
             address=self.identity,
@@ -85,6 +119,16 @@ class DeviceChoices:
     devices_by_address: dict[str, CompatibleDevice]
     addresses: tuple[str, ...]
     labels: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FanSessionState:
+    """Locally remembered values for exactly one canonical Cooling Fan address."""
+
+    manual_speed: int = 0
+    start_temperature: int = 24
+    max_temperature: int = 28
+    telemetry: CoolingFanTelemetry | None = None
 
 
 def build_device_choices(devices: Iterable[CompatibleDevice]) -> DeviceChoices:
@@ -169,6 +213,67 @@ def parse_wrgb_inputs(red: object, green: object, blue: object, white: object) -
         except ValueError as exc:
             raise WrgbValidationError(f"{label} must be a whole number from 0 to 100.") from exc
     return validate_wrgb_levels(*values)
+
+
+def parse_rg_inputs(red: object, green: object) -> tuple[int, int]:
+    values = []
+    for label, value in zip(("Red", "Green"), (red, green)):
+        if isinstance(value, str) and re.fullmatch(r"[+-]?\d+", value.strip()):
+            value = int(value.strip(), 10)
+        try:
+            values.append(validate_level(value))
+        except ValueError as exc:
+            raise RgValidationError(
+                f"{label} must be a whole number from 0 to 100."
+            ) from exc
+    return validate_rg_levels(*values)
+
+
+def parse_white_inputs(cool_white: object, warm_white: object) -> tuple[int, int]:
+    values = []
+    for label, value in zip(("Cool White", "Warm White"), (cool_white, warm_white)):
+        if isinstance(value, str) and re.fullmatch(r"[+-]?\d+", value.strip()):
+            value = int(value.strip(), 10)
+        try:
+            values.append(validate_level(value))
+        except ValueError as exc:
+            raise WhiteValidationError(
+                f"{label} must be a whole number from 0 to 100."
+            ) from exc
+    return validate_white_levels(*values)
+
+
+def parse_fan_speed_input(value: object) -> int:
+    if isinstance(value, str) and re.fullmatch(r"[+-]?\d+", value.strip()):
+        value = int(value.strip(), 10)
+    try:
+        return validate_fan_speed(value)
+    except ValueError as exc:
+        raise FanSpeedValidationError(
+            f"Fan speed level must be a whole-number device level from "
+            f"{FAN_MANUAL_SPEED_MIN} to {FAN_MANUAL_SPEED_MAX}."
+        ) from exc
+
+
+def parse_fan_temperature_inputs(
+    start_temperature: object, max_temperature: object
+) -> tuple[int, int]:
+    parsed: list[int] = []
+    for label, value in (
+        ("Start Temperature", start_temperature),
+        ("Max-Speed Temperature", max_temperature),
+    ):
+        if isinstance(value, str) and re.fullmatch(r"[+-]?\d+", value.strip()):
+            value = int(value.strip(), 10)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise FanTemperatureValidationError(
+                f"{label} must be a whole-number Celsius value representable by one protocol byte."
+            )
+        parsed.append(value)
+    try:
+        return validate_fan_temperatures(*parsed)
+    except ValueError as exc:
+        raise FanTemperatureValidationError(str(exc)) from exc
 
 
 def controls_for_device(device: CompatibleDevice | None) -> tuple[str, ...]:
@@ -290,7 +395,12 @@ class ApplicationController:
         scan_func: Callable[[float], Awaitable[list[ScanResult]]] = scan_supported_devices,
         session_factory: Callable[..., Any] | None = None,
         a2max_session_factory: Callable[..., Any] | None = None,
+        magnetic1_session_factory: Callable[..., Any] | None = None,
         magnetic2_session_factory: Callable[..., Any] | None = None,
+        zlight_session_factory: Callable[..., Any] | None = None,
+        fan_status_session_factory: Callable[..., Any] | None = None,
+        fan_manual_session_factory: Callable[..., Any] | None = None,
+        fan_automatic_session_factory: Callable[..., Any] | None = None,
     ) -> None:
         self.data_dir = data_dir or default_data_dir()
         self.log_dir = self.data_dir / "logs"
@@ -298,7 +408,13 @@ class ApplicationController:
         self._scan_func = scan_func
         self._session_factory = session_factory
         self._a2max_session_factory = a2max_session_factory
+        self._magnetic1_session_factory = magnetic1_session_factory
         self._magnetic2_session_factory = magnetic2_session_factory
+        self._zlight_session_factory = zlight_session_factory
+        self._fan_status_session_factory = fan_status_session_factory
+        self._fan_manual_session_factory = fan_manual_session_factory
+        self._fan_automatic_session_factory = fan_automatic_session_factory
+        self._fan_state_by_address: dict[str, FanSessionState] = {}
         self._busy = False
         self.logger = create_technical_logger(self.log_dir)
         self.logger.info(
@@ -326,6 +442,22 @@ class ApplicationController:
         if self._session_factory is not None:
             kwargs["session_factory"] = self._session_factory
         return Vivid2Controller(device.as_core_config(), self.log_dir, **kwargs)
+
+    def _fan_controller(self, device: CompatibleDevice) -> CoolingFanController:
+        kwargs: dict[str, Any] = {}
+        if self._fan_status_session_factory is not None:
+            kwargs["status_session_factory"] = self._fan_status_session_factory
+        if self._fan_manual_session_factory is not None:
+            kwargs["manual_session_factory"] = self._fan_manual_session_factory
+        if self._fan_automatic_session_factory is not None:
+            kwargs["automatic_session_factory"] = self._fan_automatic_session_factory
+        return CoolingFanController(device.as_core_config(), self.log_dir, **kwargs)
+
+    def fan_state(self, device: CompatibleDevice) -> FanSessionState:
+        self._validate_selected_device(device)
+        if device.model != COOLING_FAN_MODEL:
+            raise DiscoverySafetyError("Cooling Fan state requires a DYNFAN device")
+        return self._fan_state_by_address.setdefault(device.identity, FanSessionState())
 
     async def scan(self, seconds: float = DEFAULT_SCAN_SECONDS) -> tuple[CompatibleDevice, ...]:
         self._begin("scan")
@@ -419,6 +551,139 @@ class ApplicationController:
         finally:
             self._finish("apply_wrgb")
 
+    async def apply_rg(
+        self, device: CompatibleDevice, red: object, green: object
+    ) -> Path:
+        levels = parse_rg_inputs(red, green)
+        self._validate_selected_device(device)
+        if device.model != MAGNETIC_LIGHT_MODEL:
+            raise DiscoverySafetyError("RG controls require Magnetic Light")
+        self._begin("apply_rg")
+        try:
+            kwargs: dict[str, Any] = {}
+            if self._magnetic1_session_factory is not None:
+                kwargs["session_factory"] = self._magnetic1_session_factory
+            self.logger.info(
+                "rg_requested address=%s red=%d green=%d", device.identity, *levels
+            )
+            path = await Magnetic1Controller(
+                device.as_core_config(), self.log_dir, **kwargs
+            ).manual(*levels)
+            self.logger.info("rg_applied session_log=%s", path)
+            return path
+        except BaseException:
+            self.logger.exception("rg_apply_failed address=%s", device.identity)
+            raise
+        finally:
+            self._finish("apply_rg")
+
+    async def apply_white(
+        self, device: CompatibleDevice, cool_white: object, warm_white: object
+    ) -> Path:
+        levels = parse_white_inputs(cool_white, warm_white)
+        self._validate_selected_device(device)
+        if device.model != Z_LIGHT_MODEL:
+            raise DiscoverySafetyError("White controls require Z Light")
+        self._begin("apply_white")
+        try:
+            kwargs: dict[str, Any] = {}
+            if self._zlight_session_factory is not None:
+                kwargs["session_factory"] = self._zlight_session_factory
+            self.logger.info(
+                "white_requested address=%s cool_white=%d warm_white=%d",
+                device.identity, *levels,
+            )
+            path = await ZLightController(
+                device.as_core_config(), self.log_dir, **kwargs
+            ).manual(*levels)
+            self.logger.info("white_applied session_log=%s", path)
+            return path
+        except BaseException:
+            self.logger.exception("white_apply_failed address=%s", device.identity)
+            raise
+        finally:
+            self._finish("apply_white")
+
+    async def refresh_fan_status(
+        self, device: CompatibleDevice
+    ) -> tuple[CoolingFanTelemetry, Path]:
+        self._validate_selected_device(device)
+        if device.model != COOLING_FAN_MODEL:
+            raise DiscoverySafetyError("Refresh Status requires a Cooling Fan")
+        self._begin("refresh_fan_status")
+        try:
+            telemetry, path = await self._fan_controller(device).refresh_status()
+            self._fan_state_by_address[device.identity] = replace(
+                self.fan_state(device), telemetry=telemetry
+            )
+            self.logger.info("fan_status_refreshed address=%s session_log=%s", device.identity, path)
+            return telemetry, path
+        except BaseException:
+            self.logger.exception("fan_status_refresh_failed address=%s", device.identity)
+            raise
+        finally:
+            self._finish("refresh_fan_status")
+
+    async def apply_fan_manual(self, device: CompatibleDevice, speed: object) -> Path:
+        speed = parse_fan_speed_input(speed)
+        self._validate_selected_device(device)
+        if device.model != COOLING_FAN_MODEL:
+            raise DiscoverySafetyError("Manual fan speed level requires a Cooling Fan")
+        self._begin("apply_fan_manual")
+        try:
+            path = await self._fan_controller(device).manual(speed)
+            self._fan_state_by_address[device.identity] = replace(
+                self.fan_state(device), manual_speed=speed
+            )
+            self.logger.info(
+                "fan_manual_applied address=%s speed=%d session_log=%s",
+                device.identity,
+                speed,
+                path,
+            )
+            return path
+        except BaseException:
+            self.logger.exception("fan_manual_apply_failed address=%s", device.identity)
+            raise
+        finally:
+            self._finish("apply_fan_manual")
+
+    async def apply_fan_automatic(
+        self,
+        device: CompatibleDevice,
+        start_temperature: object,
+        max_temperature: object,
+    ) -> Path:
+        start_temperature, max_temperature = parse_fan_temperature_inputs(
+            start_temperature, max_temperature
+        )
+        self._validate_selected_device(device)
+        if device.model != COOLING_FAN_MODEL:
+            raise DiscoverySafetyError("Automatic thermostat configuration requires a Cooling Fan")
+        self._begin("apply_fan_automatic")
+        try:
+            path = await self._fan_controller(device).automatic(
+                start_temperature, max_temperature
+            )
+            self._fan_state_by_address[device.identity] = replace(
+                self.fan_state(device),
+                start_temperature=start_temperature,
+                max_temperature=max_temperature,
+            )
+            self.logger.info(
+                "fan_automatic_applied address=%s start=%d max=%d session_log=%s",
+                device.identity,
+                start_temperature,
+                max_temperature,
+                path,
+            )
+            return path
+        except BaseException:
+            self.logger.exception("fan_automatic_apply_failed address=%s", device.identity)
+            raise
+        finally:
+            self._finish("apply_fan_automatic")
+
     @staticmethod
     def _validate_selected_device(device: CompatibleDevice) -> None:
         if (
@@ -444,7 +709,16 @@ class ApplicationController:
 
 def friendly_error(error: BaseException, operation: str) -> str:
     """Translate technical failures for aquarium hobbyists; details remain in logs."""
-    if isinstance(error, (RgbValidationError, BrightnessValidationError)):
+    if isinstance(
+        error,
+        (
+            RgbValidationError,
+            BrightnessValidationError,
+            FanSpeedValidationError,
+            FanTemperatureValidationError,
+            WhiteValidationError,
+        ),
+    ):
         return str(error)
     if isinstance(error, BusyOperationError):
         return str(error)
@@ -453,18 +727,18 @@ def friendly_error(error: BaseException, operation: str) -> str:
     message = str(error).lower()
     if isinstance(error, TransportSafetyError):
         if "advertisement" in message or "advertised as" in message:
-            return "Could not find the selected light. Click Scan and try again."
+            return "Could not find the selected device. Click Scan and try again."
         return "BLE safety check failed; the operation stopped. Check the local log before trying again."
     if any(
         marker in message
         for marker in ("in use", "access denied", "unreachable", "0x800700aa", "resource busy")
     ):
         return (
-            "The lamp is currently in use by another Bluetooth device. "
+            "The device is currently in use by another Bluetooth client. "
             "Close My Chihiros and try again."
         )
     if operation == "scan":
-        return "Could not scan for Bluetooth lights. Check that Windows Bluetooth is on."
+        return "Could not scan for Bluetooth devices. Check that Windows Bluetooth is on."
     if operation == "save_selection":
         return "Could not remember the selected device. You can still scan and try again."
     return "Could not complete the operation. Close My Chihiros and check the local diagnostic log."
@@ -481,11 +755,20 @@ __all__ = [
     "DiscoverySafetyError",
     "DISPLAY_NAME",
     "RgbValidationError",
+    "RgValidationError",
     "BrightnessValidationError",
+    "FanSessionState",
+    "FanSpeedValidationError",
+    "FanTemperatureValidationError",
     "WrgbValidationError",
+    "WhiteValidationError",
     "controls_for_device",
     "parse_brightness_input",
+    "parse_fan_speed_input",
+    "parse_fan_temperature_inputs",
+    "parse_rg_inputs",
     "parse_wrgb_inputs",
+    "parse_white_inputs",
     "filter_compatible_devices",
     "friendly_error",
     "parse_rgb_inputs",

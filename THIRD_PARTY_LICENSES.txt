@@ -99,6 +99,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
+Cooling Fan protocol research
+------------------------------
+
+Reference: https://github.com/BartdeJonge/chihiros-esphome
+
+Public btsnoop-derived protocol research from this project informed the Cooling
+Fan implementation. The controller is independently implemented in Python; no
+C++ source is copied or vendored. This research acknowledgment does not claim
+that third-party implementation code is included in this distribution.
+
+
 Packaged runtime notices
 ------------------------
 

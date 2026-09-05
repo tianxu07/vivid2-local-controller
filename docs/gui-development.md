@@ -1,4 +1,11 @@
-# v1.2.0 validation and architecture
+# v1.3.0 validation and architecture
+
+The 1.3.0 package combines RGB Vivid II, A2 Max, Magnetic Light II, Magnetic
+Light, Cooling Fan and Z Light. Model support has physical validation evidence;
+the complete 1.3.0 packaged build still requires physical release validation.
+See [the validation checklist](release-1.3.0.md).
+
+## Earlier v1.2.0 physical validation
 
 The user completed physical GUI validation of the 1.2.0 development build with
 three Magnetic Light II units. All three were discovered separately and correctly
@@ -27,20 +34,26 @@ universal hardware/firmware support or exact official-app percentage equivalence
 - `gui/controller.py`: discovery filtering, local last-selection persistence,
   canonical identity, collision-safe display suffixes and adapter routing.
 - `chihiros/models.py`: verified Vivid II prefixes, the DYNCMC A2 Max candidate,
-  and the DYMNC Magnetic Light II prefix observed on three physical units.
+  DYCX Magnetic Light, DYMNC Magnetic Light II observed on three physical units,
+  DYNFAN Cooling Fan and DYSSD Z Light.
 - `chihiros/vivid2.py`: existing Vivid II behavior, unchanged.
 - `chihiros/a2max_controller.py`: manual mode then channel-0 brightness, no retries.
 - `chihiros/a2max_protocol.py`: shared A2 Max packet generation.
 - `chihiros/magnetic2_controller.py`: manual mode then complete R/G/B/W state,
   an ordered five-packet allowlist, exact-address checks and no retries.
 - `chihiros/magnetic2_protocol.py`: validated frame builder with direct 0..100 levels.
+- `chihiros/magnetic1_controller.py`: ordered manual/Red/Green transaction.
+- `chihiros/zlight_controller.py`: ordered manual/Cool White/Warm White transaction.
+- `chihiros/fan_controller.py`: one-shot telemetry, manual 0..20 device levels,
+  and autonomous device-side thermostat configuration followed by disconnect.
 - `chihiros/transport.py`: shared scanner, service-scoped NUS and FE59 exclusion.
 
 The full normalized BLE address is the internal identity. Dropdown labels start
 with four address digits, extending colliding suffixes until unique. Row ordering
 and label changes do not change saved identity. Duplicate advertised names and
 same-model devices remain distinct. Sliders are requested inputs, not device
-state readback. Magnetic II inputs are kept per address for the current session;
+state readback. Magnetic Light, Magnetic II, Z Light and Cooling Fan inputs are
+kept separately per address for the current session;
 existing Vivid II and A2 Max input behavior is preserved. Only the selected
 address is persisted; there is no persistent multi-device settings database.
 

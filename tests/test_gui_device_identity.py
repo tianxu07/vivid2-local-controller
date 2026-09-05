@@ -205,7 +205,10 @@ class DropdownIdentityTests(unittest.TestCase):
                 texts.update(button_texts(child))
             return texts
 
-        expected_buttons = {"Scan for Lights", "Apply RGB", "Apply Brightness", "Apply WRGB"}
+        expected_buttons = {
+            "Scan for Devices", "Apply RGB", "Apply Brightness", "Apply RG", "Apply WRGB",
+            "Apply White", "Refresh Status", "Apply Manual", "Apply Automatic",
+        }
         self.assertEqual(button_texts(self.root), expected_buttons)
         self.assertFalse(hasattr(self.application, "forget_button"))
         self.assertFalse(hasattr(self.application, "forget_device"))

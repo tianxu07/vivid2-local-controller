@@ -1,8 +1,10 @@
-# Local v1.2.0 packaging preparation
+# Local v1.3.0 packaging preparation
 
-The product is **Chihiros Local Controller 1.2.0** with RGB Vivid II, A2 Max and
-Magnetic Light II manual control. This phase creates local artifacts from
-`feature/magnetic2`, with no commit, tag, push, GitHub release or upload.
+The product is **Chihiros Local Controller 1.3.0** with RGB Vivid II, A2 Max,
+Magnetic Light II, Magnetic Light, Cooling Fan and Z Light support. This phase
+creates artifacts for physical validation from `feature/zlight`, with no commit,
+tag, push, merge, GitHub release or upload. Public v1.2.0 remains the previous
+release until a separately authorized publication.
 Existing release artifacts remain untouched.
 
 ## Prerequisites and audit
@@ -29,14 +31,14 @@ before any later public push; a clean payload does not sanitize historical commi
 From the repository root:
 
 ```powershell
-.\packaging\build_release.ps1 -Version 1.2.0
+.\packaging\build_release.ps1 -Version 1.3.0 -RunName physical-validation
 ```
 
 The builder audits source, runs all hardware-free tests, then creates both
 PyInstaller variants. Each run uses new timestamped version directories and
 refuses to overwrite existing output. It never launches the application.
 
-The outputs under `release/v1.2.0-<run>/` are:
+The outputs under `release/v1.3.0-<run>/` are:
 
 ```text
 onedir/ChihirosLocalController/
@@ -47,8 +49,8 @@ onedir/ChihirosLocalController/
   PYTHON_LICENSE.txt
   PYINSTALLER_COPYING.txt
   _internal/
-ChihirosLocalController-1.2.0-windows-x64.zip
-ChihirosLocalController-1.2.0-windows-x64-onefile.exe
+ChihirosLocalController-1.3.0-windows-x64.zip
+ChihirosLocalController-1.3.0-windows-x64-onefile.exe
 SHA256SUMS.txt
 ```
 
@@ -57,7 +59,7 @@ its documentation and licenses. SHA256SUMS.txt covers the ZIP and optional
 one-file executable. Logs, captures, environments, private configurations,
 research/decompilation artifacts and tests are not package contents.
 The audit report and intermediate build diagnostics stay in the separate
-`build-v1.2.0-<run>` directory, not the public payload.
+`build-v1.3.0-<run>` directory, not the public payload.
 
 For direct developer builds, the generalized specifications are
 `ChihirosLocalController.spec` and `ChihirosLocalController-onefile.spec`.

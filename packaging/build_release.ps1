@@ -1,11 +1,11 @@
 param(
-    [string]$Version = "1.2.0",
+    [string]$Version = "1.3.0",
     [string]$PrivatePatterns = "",
     [string]$RunName = ""
 )
 
 $ErrorActionPreference = "Stop"
-if ($Version -ne "1.2.0") { throw "This builder prepares only v1.2.0; it must not overwrite older releases." }
+if ($Version -ne "1.3.0") { throw "This builder prepares only v1.3.0; it must not overwrite older releases." }
 if (-not $RunName) { $RunName = Get-Date -Format "yyyyMMdd-HHmmss-fff" }
 if ($RunName -notmatch '^[A-Za-z0-9_-]+$') { throw "RunName must be a simple directory suffix." }
 

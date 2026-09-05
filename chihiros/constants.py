@@ -6,7 +6,7 @@ from __future__ import annotations
 UPSTREAM_COMMIT = "05ae7654b3d4de1df887be3827cd85dd33fe0af6"
 UPSTREAM_ROOT = f"https://github.com/TheMicDiet/chihiros-led-control/blob/{UPSTREAM_COMMIT}"
 CONTROLLER_VERSION = "5.0.0"
-WINDOWS_APP_VERSION = "1.2.0"
+WINDOWS_APP_VERSION = "1.3.0"
 DEVELOPMENT_APP_VERSION = WINDOWS_APP_VERSION  # Compatibility for older source integrations.
 
 NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
@@ -35,6 +35,22 @@ RGB_VIVID_II_PREFIXES = RGB_VIVID_II_NEW_BLE_LED_PREFIXES + RGB_VIVID_II_SEA_LED
 MAGNETIC_II_MODEL = "Magnetic Light II"
 MAGNETIC_II_PREFIXES = ("DYMNC",)
 
+# Physically validated original (first-generation) Magnetic Light hardware.
+# DYCX is intentionally scoped to the explicit GUI registry in models.py.
+MAGNETIC_LIGHT_MODEL = "Magnetic Light"
+MAGNETIC_LIGHT_PREFIXES = ("DYCX",)
+
+# Physically validated standalone Cooling Fan advertisements.
+COOLING_FAN_MODEL = "Cooling Fan"
+COOLING_FAN_PREFIXES = ("DYNFAN",)
+FAN_MANUAL_SPEED_MIN = 0
+FAN_MANUAL_SPEED_MAX = 20
+
+# Physically validated Z Light hardware. Compatibility with every hardware or
+# firmware revision is not claimed.
+Z_LIGHT_MODEL = "Z Light"
+Z_LIGHT_PREFIXES = ("DYSSD",)
+
 # One physically identified A2 Max advertised with this prefix. This is
 # deliberately not a KNOWN_PREFIX_MODELS entry. The development GUI explicitly
 # opts into this candidate via models.py; it is not universal A2 Max coverage.
@@ -43,6 +59,8 @@ A2_MAX_CANDIDATE_SAMPLE_COUNT = 1
 
 STATUS_RESPONSE_WAIT_SECONDS = 1.0
 BATCH_WRITE_DELAY_SECONDS = 0.03
+FAN_STATUS_RESPONSE_WAIT_SECONDS = 2.0
+FAN_CONFIGURATION_WRITE_DELAY_SECONDS = 0.2
 
 # Upstream model registry at UPSTREAM_COMMIT. Longest prefix wins.
 KNOWN_PREFIX_MODELS: tuple[tuple[str, str], ...] = tuple(
