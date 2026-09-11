@@ -1,7 +1,7 @@
 # Independent upstream support implementation
 
 This development branch starts at released tag `v1.3.0`, commit
-`0ab7955329dd8a79b82a1c51235e033b0fbe7b60`. Application version remains 1.3.0;
+`0ab7955329dd8a79b82a1c51235e033b0fbe7b60`. Application release version is 1.4.0;
 this work does not describe a new packaged release. New devices are supported
 from source through the existing Windows GUI. They have not been physically
 validated by this project.
@@ -197,7 +197,7 @@ acceptance of the new profiles.
 At this checkpoint the extension adds four production modules (three core and
 one GUI panel), approximately 558 net production lines including the two small
 GUI integration edits, versus 2,951 on the preserved feature branch. New tests
-occupy 607 lines versus 4,201 phase-test lines on that branch. These physical LOC
+occupy 611 lines versus 4,201 phase-test lines on that branch. These physical LOC
 counts include comments and blank lines. Coverage differs deliberately: 16 new
 writable profiles versus 20, and no non-runnable Commander configuration UI.
 

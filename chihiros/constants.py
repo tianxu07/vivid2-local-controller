@@ -6,7 +6,7 @@ from __future__ import annotations
 UPSTREAM_COMMIT = "05ae7654b3d4de1df887be3827cd85dd33fe0af6"
 UPSTREAM_ROOT = f"https://github.com/TheMicDiet/chihiros-led-control/blob/{UPSTREAM_COMMIT}"
 CONTROLLER_VERSION = "5.0.0"
-WINDOWS_APP_VERSION = "1.3.0"
+WINDOWS_APP_VERSION = "1.4.0"
 DEVELOPMENT_APP_VERSION = WINDOWS_APP_VERSION  # Compatibility for older source integrations.
 
 NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
