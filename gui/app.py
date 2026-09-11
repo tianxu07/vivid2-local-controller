@@ -21,6 +21,7 @@ from chihiros.constants import (
     Z_LIGHT_MODEL,
 )
 from chihiros.fan_controller import CoolingFanTelemetry
+from gui.upstream_panel import UpstreamPanel
 from gui.controller import (
     ApplicationController,
     CompatibleDevice,
@@ -254,6 +255,7 @@ class ChihirosApplication:
 
         controls_frame = ttk.Frame(outer)
         controls_frame.pack(fill="x", pady=(14, 0))
+        self.upstream_panel = UpstreamPanel(controls_frame, self)
         self.rgb_frame = rgb_frame = ttk.LabelFrame(controls_frame, text="Manual RGB brightness", padding=12)
         self.scales: list[tk.Scale] = []
         for row, (label, variable, color) in enumerate(
@@ -547,7 +549,9 @@ class ChihirosApplication:
         elif not self.smart_plug_label.winfo_ismapped():
             self.smart_plug_label.pack(anchor="w", pady=(12, 0), before=self.disclaimer_label)
         controls = controls_for_device(device)
-        if controls == ("Red", "Green", "Blue"):
+        if self.upstream_panel.show(device):
+            pass
+        elif controls == ("Red", "Green", "Blue"):
             self.rgb_frame.pack(fill="x")
             self.apply_button.pack(fill="x", expand=True, padx=(90, 90))
         elif controls == ("Brightness",):
@@ -610,6 +614,7 @@ class ChihirosApplication:
         return device
 
     def _set_busy(self, busy: bool) -> None:
+        self.upstream_panel.set_busy(busy)
         button_state = "disabled" if busy else "normal"
         combo_state = "disabled" if busy else "readonly"
         self.scan_button.configure(state=button_state)
@@ -780,7 +785,12 @@ class ChihirosApplication:
             self.active_operation = None
             self._set_busy(False)
             if result.error is not None:
+                if operation == "upstream":
+                    self.upstream_panel.finish(None, result.error)
                 self._show_error(result.error, operation)
+            elif operation == "upstream":
+                self.upstream_panel.finish(result.value, None)
+                self.status_var.set("Upstream operation completed; check the device result.")
             elif operation == "scan":
                 self._scan_completed(result.value)
             elif operation == "apply_rgb":

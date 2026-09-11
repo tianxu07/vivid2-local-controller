@@ -1,4 +1,8 @@
 Chihiros Local Controller 1.3.0
+Development source on astra6-upstream-reimplementation adds isolated upstream
+light support and VIVID III fan/telemetry controls. See docs/upstream-support.md
+for exact coverage, withheld devices, evidence and verification. The six local
+implementations and version are unchanged; no new release package was built.
 ==============================
 
 Unofficial community tool. Not affiliated with Chihiros Aquatic Studio.

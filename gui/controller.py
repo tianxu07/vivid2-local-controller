@@ -22,7 +22,10 @@ from chihiros.constants import (
     WINDOWS_APP_VERSION,
     Z_LIGHT_MODEL,
 )
-from chihiros.models import A2_MAX_MODEL, detect_supported_model, supported_model
+from chihiros.models import A2_MAX_MODEL
+from chihiros.upstream_profiles import detect_supported_model, supported_model
+from chihiros.upstream_control import UpstreamOperation
+from chihiros.upstream_protocol import Request
 from chihiros.a2max_controller import A2MaxController
 from chihiros.a2max_protocol import validate_a2max_level
 from chihiros.magnetic1_controller import Magnetic1Controller
@@ -603,6 +606,16 @@ class ApplicationController:
             raise
         finally:
             self._finish("apply_white")
+
+    async def execute_upstream(self, device: CompatibleDevice, request: Request):
+        """New devices only; existing six Apply paths retain their model guards."""
+        self._validate_selected_device(device)
+        operation = UpstreamOperation(device.as_core_config(), request, self.log_dir)
+        self._begin("upstream")
+        try:
+            return await operation.run()
+        finally:
+            self._finish("upstream")
 
     async def refresh_fan_status(
         self, device: CompatibleDevice

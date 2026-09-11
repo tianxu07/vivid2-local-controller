@@ -1,5 +1,11 @@
 # Chihiros Local Controller 1.3.0
 
+Development source on `astra6-upstream-reimplementation` adds separately isolated
+upstream-derived manual light support and VIVID III fan/telemetry controls. See
+[coverage, evidence, safety decisions and testing](docs/upstream-support.md).
+The six physically validated implementations and application version remain
+unchanged. No new release package has been built from this branch.
+
 A local Windows application for control of supported Chihiros aquarium lights
 and Cooling Fans directly over Bluetooth Low Energy. No Chihiros account, login, internet
 connection or Chihiros cloud service is required.
