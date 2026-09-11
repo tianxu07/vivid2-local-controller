@@ -13,7 +13,7 @@ connection or Chihiros cloud service is required.
 
 Created by **Tianxu Yang** · Instagram: **[@tianxu_07](https://www.instagram.com/tianxu_07/)**
 
-This **1.3.0 physical-validation build** includes all six supported models below.
+This **1.4.0 release** includes all six supported models below.
 Validation of the complete packaged build is pending. The current public release
 remains **v1.2.0**; these local artifacts have not been published.
 
@@ -71,15 +71,15 @@ Windows 10/11 x64 with Bluetooth LE is required. Python is not required for the
 packaged application. The recommended package is:
 
 ```text
-ChihirosLocalController-1.3.0-windows-x64.zip
+ChihirosLocalController-1.4.0-windows-x64.zip
 ```
 
 Extract the **entire ZIP**, open the `ChihirosLocalController` folder, and run
 `ChihirosLocalController.exe`. Keep its `_internal` directory alongside it.
 
 The previous public v1.2.0 package predates original Magnetic Light, Cooling Fan
-and Z Light support. This 1.3.0 package is for physical validation. The optional
-`ChihirosLocalController-1.3.0-windows-x64-onefile.exe` includes the
+and Z Light support. This 1.4.0 package includes the upstream-derived device support described above. The optional
+`ChihirosLocalController-1.4.0-windows-x64-onefile.exe` includes the
 runtime in one executable; extraction can make startup slower. Verify the
 artifact against `SHA256SUMS.txt`. The application is unsigned; Windows may
 show a SmartScreen warning. Only run a copy from a source you trust.
@@ -191,7 +191,7 @@ python .\chihiros_local_controller.py
 
 The old `vivid2_gui.py` launcher is only a compatibility shim for the same GUI.
 
-[Local packaging](docs/releasing.md) builds audited 1.3.0 Windows artifacts
+[Local packaging](docs/releasing.md) builds audited 1.4.0 Windows artifacts
 without publishing them. [1.3.0 validation notes](docs/release-1.3.0.md) describe
 the supported scope and packaged validation checklist.
 [Previous release notes](docs/release-1.2.0.md) retain the 1.2.0 history.
